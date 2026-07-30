@@ -3,6 +3,8 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Lock, User, Eye, EyeOff, AlertCircle } from "lucide-react";
+import { setAuthSession } from "@/lib/auth";
+import { addAuditLog } from "@/lib/audit-log";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -31,6 +33,18 @@ export default function LoginPage() {
 
       // Admin verification
       if (cleanUsername === "dinhcongnhat" && cleanPassword === "10122002") {
+        setAuthSession({
+          username: "dinhcongnhat",
+          fullName: "Định Công Nhật (Admin)",
+          role: "admin",
+          token: "admin_token_" + Date.now(),
+        });
+        addAuditLog({
+          action: "USER_LOGIN",
+          actorName: "Định Công Nhật",
+          actorRole: "admin",
+          details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
+        });
         router.push("/admin");
         return;
       }
@@ -38,12 +52,25 @@ export default function LoginPage() {
       // Employee verification
       const employeeUsernames = ["minhquan", "hoanglong", "ducanh", "baonam", "quan", "long"];
       if (employeeUsernames.includes(cleanUsername) && (cleanPassword === "10122002" || cleanPassword === "123456")) {
+        const empName = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
+        setAuthSession({
+          username: cleanUsername,
+          fullName: empName,
+          role: "employee",
+          token: "employee_token_" + Date.now(),
+        });
+        addAuditLog({
+          action: "USER_LOGIN",
+          actorName: empName,
+          actorRole: "employee",
+          details: `Đã đăng nhập thành công vào giao diện nhân viên`,
+        });
         router.push("/employee");
         return;
       }
 
       setError("Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại!");
-    }, 500);
+    }, 400);
   };
 
   return (

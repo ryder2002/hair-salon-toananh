@@ -101,3 +101,30 @@ export async function toggleEmployeeStatusAction(employeeId: string, status: "ac
   if (error) throw new Error(error.message);
   return data;
 }
+
+export async function deleteEmployeeAction(employeeId: string) {
+  const adminClient = createAdminClient();
+
+  // 1. Delete associated salary settings
+  await adminClient.from("salary_settings").delete().eq("employee_id", employeeId);
+
+  // 2. Delete profile
+  const { error: profileError } = await adminClient
+    .from("profiles")
+    .delete()
+    .eq("id", employeeId);
+
+  if (profileError) {
+    console.error("Error deleting profile:", profileError);
+  }
+
+  // 3. Delete auth user if valid UUID
+  try {
+    await adminClient.auth.admin.deleteUser(employeeId);
+  } catch (authError) {
+    console.warn("Auth user deletion warning:", authError);
+  }
+
+  return { success: true };
+}
+

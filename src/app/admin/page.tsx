@@ -76,10 +76,7 @@ export default function AdminDashboardPage() {
 
         {/* Day Closing Card */}
         <section>
-          <DayClosingCard
-            isClosed={isClosed}
-            onCloseDay={() => setIsClosed(true)}
-          />
+          <DayClosingCard />
         </section>
       </main>
 

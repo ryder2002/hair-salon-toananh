@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { PwaRegister } from "@/components/pwa/PwaRegister";
+import { PushNotificationRegistrar } from "@/components/pwa/PushNotificationRegistrar";
 
 export const metadata: Metadata = {
   title: "Toàn Anh Hair Salon - Quản lý tiệm tóc",
@@ -32,6 +33,7 @@ export default function RootLayout({
       </head>
       <body className="bg-[#F7F3EC] text-[#171717] antialiased min-h-screen">
         <PwaRegister />
+        <PushNotificationRegistrar />
         {children}
       </body>
     </html>

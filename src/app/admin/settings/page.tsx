@@ -2,18 +2,41 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BellRing, Shield, FileText, Store, LogOut, ChevronRight, CheckCircle2 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
+import { clearAuthSession } from "@/lib/auth";
+import { addAuditLog } from "@/lib/audit-log";
+
+import { registerWebPushSubscription } from "@/lib/push/webpush";
 
 export default function AdminSettingsPage() {
+  const router = useRouter();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [msg, setMsg] = useState("");
 
-  const togglePush = () => {
-    setPushEnabled(!pushEnabled);
-    setMsg(!pushEnabled ? "Đã bật Web Push Notification!" : "Đã tắt Web Push Notification.");
-    setTimeout(() => setMsg(""), 2500);
+  const togglePush = async () => {
+    const nextState = !pushEnabled;
+    setPushEnabled(nextState);
+    if (nextState) {
+      await registerWebPushSubscription();
+      setMsg("Đã xin quyền và bật Web Push Notification!");
+    } else {
+      setMsg("Đã tắt Web Push Notification.");
+    }
+    setTimeout(() => setMsg(""), 3000);
+  };
+
+  const handleLogout = () => {
+    addAuditLog({
+      action: "USER_LOGOUT",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: "Đã đăng xuất khỏi tài khoản Admin",
+    });
+    clearAuthSession();
+    router.push("/login");
   };
 
   return (
@@ -44,7 +67,7 @@ export default function AdminSettingsPage() {
           {/* Push Notification Toggle */}
           <div className="p-4 flex justify-between items-center">
             <div className="flex items-center space-x-3">
-              <BellRing className="w-5 h-5 text-[#741F2C]" />
+              <BellRing className="w-[#741F2C] h-5 w-5" />
               <div>
                 <div className="text-[#171717]">Web Push Notification</div>
                 <div className="text-xs text-[rgba(23,23,23,0.5)] font-normal">Nhận thông báo khi có doanh thu mới</div>
@@ -78,13 +101,14 @@ export default function AdminSettingsPage() {
         </div>
 
         {/* Logout Button */}
-        <Link
-          href="/login"
-          className="w-full bg-white border border-red-200 text-red-700 py-3.5 rounded-[12px] font-bold text-sm flex items-center justify-center space-x-2 shadow-sm block text-center"
+        <button
+          type="button"
+          onClick={handleLogout}
+          className="w-full bg-white border border-red-200 text-red-700 py-3.5 rounded-[12px] font-bold text-sm flex items-center justify-center space-x-2 shadow-sm block text-center hover:bg-red-50 transition-colors"
         >
           <LogOut className="w-4 h-4 inline-block mr-1" />
           <span>ĐĂNG XUẤT QUYỀN ADMIN</span>
-        </Link>
+        </button>
       </main>
 
       <AdminBottomNav />

@@ -2,9 +2,10 @@
 
 import React, { useState } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, Lock, Unlock, Save, CheckCircle2, DollarSign, Percent } from "lucide-react";
+import { ArrowLeft, Lock, Unlock, Save, CheckCircle2, DollarSign, Percent, Trash2, AlertTriangle, X } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
+import { addAuditLog } from "@/lib/audit-log";
 
 export default function EmployeeDetailPage() {
   const router = useRouter();
@@ -18,6 +19,8 @@ export default function EmployeeDetailPage() {
   const [rawAllowance, setRawAllowance] = useState("1000000");
   const [commissionRate, setCommissionRate] = useState("10.0");
   const [saved, setSaved] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const baseSalaryNum = parseVNDInput(rawBaseSalary);
   const allowanceNum = parseVNDInput(rawAllowance);
@@ -25,11 +28,39 @@ export default function EmployeeDetailPage() {
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
     setSaved(true);
+    addAuditLog({
+      action: "STAFF_UPDATED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
+    });
     setTimeout(() => setSaved(false), 2000);
   };
 
   const toggleStatus = () => {
-    setStatus((prev) => (prev === "active" ? "inactive" : "active"));
+    const newStatus = status === "active" ? "inactive" : "active";
+    setStatus(newStatus);
+    addAuditLog({
+      action: newStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã ${newStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName}`,
+    });
+  };
+
+  const handleDeleteEmployee = () => {
+    setDeleting(true);
+    addAuditLog({
+      action: "STAFF_DELETED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã xóa tài khoản người dùng/nhân viên ${fullName} (Chức vụ: ${jobTitle}) khỏi hệ thống`,
+    });
+    setTimeout(() => {
+      setDeleting(false);
+      setShowDeleteModal(false);
+      router.push("/admin/employees");
+    }, 600);
   };
 
   return (
@@ -45,7 +76,13 @@ export default function EmployeeDetailPage() {
           <h1 className="text-xl font-bold text-[#171717] tracking-tight">
             Hồ sơ nhân viên
           </h1>
-          <div className="w-6" />
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="p-1.5 rounded-full text-red-600 hover:bg-red-50"
+            title="Xóa người dùng"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
         </div>
       </header>
 
@@ -169,9 +206,63 @@ export default function EmployeeDetailPage() {
             <span>LƯU CẤU HÌNH LƯƠNG</span>
           </button>
         </form>
+
+        {/* Delete User Section */}
+        <div className="pt-2">
+          <button
+            type="button"
+            onClick={() => setShowDeleteModal(true)}
+            className="w-full bg-white border border-red-200 text-red-700 py-3 rounded-[10px] font-bold text-sm shadow-sm flex items-center justify-center space-x-2 hover:bg-red-50 transition-colors"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span>XÓA TÀI KHOẢN NGƯỜI DÙNG</span>
+          </button>
+        </div>
       </main>
+
+      {/* Confirmation Modal Delete User */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[16px] max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+            <button
+              onClick={() => setShowDeleteModal(false)}
+              className="absolute right-4 top-4 text-[rgba(23,23,23,0.4)] hover:text-[#171717]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2 text-red-600">
+              <AlertTriangle className="w-6 h-6" />
+              <h3 className="font-bold text-lg text-[#171717]">Xác nhận xóa người dùng</h3>
+            </div>
+
+            <p className="text-xs text-[rgba(23,23,23,0.7)] leading-relaxed">
+              Bạn có chắc chắn muốn xóa nhân viên <strong className="text-red-700 font-bold">{fullName}</strong> không? Hành động này sẽ gỡ bỏ tài khoản và dữ liệu liên quan.
+            </p>
+
+            <div className="flex space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 border border-[rgba(23,23,23,0.2)] py-2.5 text-xs font-bold rounded-[10px] text-[#171717]"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                disabled={deleting}
+                onClick={handleDeleteEmployee}
+                className="flex-1 py-2.5 text-xs font-bold rounded-[10px] bg-red-700 text-white hover:bg-red-800 transition-colors"
+              >
+                {deleting ? "Đang xóa..." : "Xác nhận Xóa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AdminBottomNav />
     </div>
   );
 }
+

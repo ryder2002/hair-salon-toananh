@@ -35,3 +35,20 @@ export function formatTimeDisplay(dateStr: string | Date): string {
   const dateObj = typeof dateStr === "string" ? new Date(dateStr) : dateStr;
   return format(dateObj, "HH:mm");
 }
+
+/**
+ * Returns current Vietnam month string formatted as "Tháng MM/YYYY" (e.g. "Tháng 07/2026")
+ */
+export function getCurrentVietnamMonthStr(date: Date = new Date()): string {
+  const options: Intl.DateTimeFormatOptions = {
+    timeZone: VIETNAM_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+  };
+  const formatter = new Intl.DateTimeFormat("vi-VN", options);
+  const parts = formatter.formatToParts(date);
+  const month = parts.find((p) => p.type === "month")?.value || "01";
+  const year = parts.find((p) => p.type === "year")?.value || "2026";
+  return `Tháng ${month}/${year}`;
+}
+

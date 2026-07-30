@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { BarberIcon } from "@/components/ui/BarberIcon";
 import { formatVND } from "@/lib/money";
@@ -28,7 +29,12 @@ export function StaffRevenueProgressList({
   return (
     <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm space-y-4">
       {items.map((staff) => (
-        <div key={staff.id} className="flex items-center space-x-3 text-sm">
+        <Link
+          key={staff.id}
+          href={`/admin/employees`}
+          prefetch={true}
+          className="flex items-center space-x-3 text-sm hover:opacity-80 transition-opacity cursor-pointer block"
+        >
           {/* Circular icon badge */}
           <div className="w-10 h-10 rounded-full bg-[rgba(23,23,23,0.04)] border border-[rgba(23,23,23,0.1)] flex items-center justify-center flex-shrink-0 text-[#171717]">
             <BarberIcon type={staff.avatarType || "scissors"} className="w-5 h-5" />
@@ -61,7 +67,7 @@ export function StaffRevenueProgressList({
             </span>
             <ChevronRight className="w-4 h-4 text-[rgba(23,23,23,0.4)]" />
           </div>
-        </div>
+        </Link>
       ))}
     </div>
   );

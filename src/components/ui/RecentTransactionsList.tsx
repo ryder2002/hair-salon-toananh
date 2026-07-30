@@ -57,74 +57,71 @@ export function RecentTransactionsList({
   showStatusBadge = false,
 }: RecentTransactionsListProps) {
   return (
-    <div className="space-y-3">
+    <div className="space-y-2.5">
       {transactions.map((t) => {
         const isVoided = t.status === "voided";
 
         return (
           <div
             key={t.id}
-            className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-3.5 shadow-sm flex items-center justify-between"
+            className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-3 sm:p-3.5 shadow-sm flex items-center justify-between gap-2 overflow-hidden"
           >
             {/* Left: Avatar & Info */}
-            <div className="flex items-center space-x-3 min-w-0">
-              <div className="w-10 h-10 rounded-full bg-[rgba(23,23,23,0.04)] border border-[rgba(23,23,23,0.1)] flex items-center justify-center flex-shrink-0 text-[#171717]">
-                <BarberIcon type={t.avatarType || "scissors"} className="w-5 h-5" />
+            <div className="flex items-center space-x-2.5 min-w-0 flex-1">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[rgba(23,23,23,0.04)] border border-[rgba(23,23,23,0.1)] flex items-center justify-center flex-shrink-0 text-[#171717]">
+                <BarberIcon type={t.avatarType || "scissors"} className="w-4 h-4 sm:w-5 sm:h-5" />
               </div>
-              <div className="min-w-0">
-                <h4 className="font-bold text-[#171717] text-sm truncate leading-tight">
+              <div className="min-w-0 flex-1">
+                <h4 className="font-bold text-[#171717] text-xs sm:text-sm truncate leading-tight">
                   {t.staffName}
                 </h4>
-                <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium truncate mt-0.5">
+                <p className="text-[11px] sm:text-xs text-[rgba(23,23,23,0.6)] font-medium truncate mt-0.5" title={t.serviceName}>
                   {t.serviceName}
                 </p>
               </div>
             </div>
 
             {/* Right: Amount, Payment Method, Status & Time */}
-            <div className="flex items-center space-x-2 text-right flex-shrink-0">
-              <div>
+            <div className="flex items-center space-x-1.5 sm:space-x-2 text-right flex-shrink-0">
+              <div className="text-right">
                 <div
-                  className={`font-bold text-sm ${
+                  className={`font-extrabold text-xs sm:text-sm whitespace-nowrap ${
                     isVoided ? "line-through text-red-600" : "text-[#741F2C]"
                   }`}
                 >
                   {isVoided ? `-${formatVND(Math.abs(Number(t.amount)))}` : formatVND(t.amount)}
                 </div>
-                <div className="flex items-center justify-end space-x-1 mt-0.5 text-xs text-[rgba(23,23,23,0.6)] font-medium">
+                <div className="flex items-center justify-end space-x-1 mt-0.5 text-[10px] sm:text-xs text-[rgba(23,23,23,0.6)] font-medium whitespace-nowrap">
                   {t.paymentMethod === "cash" ? (
                     <>
-                      <Banknote className="w-3.5 h-3.5 text-[#171717]" />
+                      <Banknote className="w-3 h-3 text-[#171717]" />
                       <span>Tiền mặt</span>
                     </>
                   ) : (
                     <>
-                      <CreditCard className="w-3.5 h-3.5 text-[#171717]" />
-                      <span>Chuyển khoản</span>
+                      <CreditCard className="w-3 h-3 text-[#171717]" />
+                      <span>CK</span>
                     </>
                   )}
+                  <span className="text-[rgba(23,23,23,0.4)] ml-1">{t.time}</span>
                 </div>
               </div>
 
               {showStatusBadge && (
-                <div className="pl-1">
+                <div className="pl-0.5">
                   {isVoided ? (
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-red-100 text-red-800">
-                      Đã hủy
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-100 text-red-800 whitespace-nowrap">
+                      Hủy
                     </span>
                   ) : (
-                    <span className="px-2 py-0.5 rounded-md text-[11px] font-semibold bg-emerald-100 text-emerald-800">
-                      Hoàn thành
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">
+                      OK
                     </span>
                   )}
                 </div>
               )}
 
-              <div className="text-xs text-[rgba(23,23,23,0.5)] font-medium pl-1">
-                {t.time}
-              </div>
-
-              <ChevronRight className="w-4 h-4 text-[rgba(23,23,23,0.4)]" />
+              <ChevronRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[rgba(23,23,23,0.4)] flex-shrink-0" />
             </div>
           </div>
         );

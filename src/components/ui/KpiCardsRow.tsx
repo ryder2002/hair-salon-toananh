@@ -24,82 +24,82 @@ export function KpiCardsRow({
   const bankPercent = ((Number(bankTotal) / totalNum) * 100).toFixed(1);
 
   return (
-    <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-none snap-x">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3">
       {/* 1. Total Revenue Card (Burgundy background) */}
-      <div className="min-w-[170px] flex-1 bg-[#741F2C] text-white p-3.5 rounded-[14px] shadow-sm snap-start flex flex-col justify-between">
-        <div className="flex justify-between items-start">
-          <span className="text-[11px] font-medium text-white/90 leading-tight">
-            Tổng doanh thu hôm nay
+      <div className="bg-[#741F2C] text-white p-3 sm:p-3.5 rounded-[14px] shadow-sm flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] sm:text-[11px] font-medium text-white/90 leading-tight">
+            Tổng doanh thu
           </span>
-          <div className="w-7 h-7 rounded-full bg-white/15 flex items-center justify-center">
-            <CircleDollarSign className="w-4 h-4 text-white" />
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-white/15 flex items-center justify-center flex-shrink-0">
+            <CircleDollarSign className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
           </div>
         </div>
-        <div className="mt-3">
-          <div className="text-lg font-bold tracking-tight leading-tight">
+        <div className="mt-2 sm:mt-3">
+          <div className="text-sm sm:text-lg font-extrabold tracking-tight leading-tight truncate" title={formatVND(totalRevenue)}>
             {formatVND(totalRevenue)}
           </div>
-          <div className="text-[10px] text-white/80 font-medium mt-1 flex items-center">
-            <span>↑ {revenueGrowthPercent}% so với hôm qua</span>
+          <div className="text-[9px] sm:text-[10px] text-white/80 font-medium mt-0.5">
+            ↑ {revenueGrowthPercent}% hôm qua
           </div>
         </div>
       </div>
 
       {/* 2. Cash Total Card */}
-      <div className="min-w-[130px] flex-1 bg-white border border-[rgba(23,23,23,0.12)] p-3.5 rounded-[14px] shadow-sm snap-start flex flex-col justify-between">
-        <div className="flex justify-between items-start">
-          <span className="text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
+      <div className="bg-white border border-[rgba(23,23,23,0.12)] p-3 sm:p-3.5 rounded-[14px] shadow-sm flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] sm:text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
             Tiền mặt
           </span>
-          <div className="w-7 h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center">
-            <Banknote className="w-4 h-4 text-[#171717]" />
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center flex-shrink-0">
+            <Banknote className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#171717]" />
           </div>
         </div>
-        <div className="mt-3">
-          <div className="text-base font-bold text-[#171717] tracking-tight">
+        <div className="mt-2 sm:mt-3">
+          <div className="text-xs sm:text-base font-bold text-[#171717] tracking-tight truncate" title={formatVND(cashTotal)}>
             {formatVND(cashTotal)}
           </div>
-          <div className="text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-1">
-            {cashPercent}%
+          <div className="text-[9px] sm:text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-0.5">
+            {cashPercent}% tổng DT
           </div>
         </div>
       </div>
 
       {/* 3. Bank Transfer Card */}
-      <div className="min-w-[130px] flex-1 bg-white border border-[rgba(23,23,23,0.12)] p-3.5 rounded-[14px] shadow-sm snap-start flex flex-col justify-between">
-        <div className="flex justify-between items-start">
-          <span className="text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
+      <div className="bg-white border border-[rgba(23,23,23,0.12)] p-3 sm:p-3.5 rounded-[14px] shadow-sm flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] sm:text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
             Chuyển khoản
           </span>
-          <div className="w-7 h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center">
-            <CreditCard className="w-4 h-4 text-[#171717]" />
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center flex-shrink-0">
+            <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#171717]" />
           </div>
         </div>
-        <div className="mt-3">
-          <div className="text-base font-bold text-[#171717] tracking-tight">
+        <div className="mt-2 sm:mt-3">
+          <div className="text-xs sm:text-base font-bold text-[#171717] tracking-tight truncate" title={formatVND(bankTotal)}>
             {formatVND(bankTotal)}
           </div>
-          <div className="text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-1">
-            {bankPercent}%
+          <div className="text-[9px] sm:text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-0.5">
+            {bankPercent}% tổng DT
           </div>
         </div>
       </div>
 
       {/* 4. Transaction Count Card */}
-      <div className="min-w-[120px] flex-1 bg-white border border-[rgba(23,23,23,0.12)] p-3.5 rounded-[14px] shadow-sm snap-start flex flex-col justify-between">
-        <div className="flex justify-between items-start">
-          <span className="text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
-            Số giao dịch
+      <div className="bg-white border border-[rgba(23,23,23,0.12)] p-3 sm:p-3.5 rounded-[14px] shadow-sm flex flex-col justify-between">
+        <div className="flex justify-between items-center">
+          <span className="text-[10px] sm:text-[11px] font-medium text-[rgba(23,23,23,0.7)]">
+            Số lượt làm
           </span>
-          <div className="w-7 h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center">
-            <Receipt className="w-4 h-4 text-[#171717]" />
+          <div className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-[rgba(23,23,23,0.04)] flex items-center justify-center flex-shrink-0">
+            <Receipt className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-[#171717]" />
           </div>
         </div>
-        <div className="mt-3">
-          <div className="text-lg font-bold text-[#171717] tracking-tight">
+        <div className="mt-2 sm:mt-3">
+          <div className="text-sm sm:text-lg font-bold text-[#171717] tracking-tight">
             {transactionCount}
           </div>
-          <div className="text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-1">
+          <div className="text-[9px] sm:text-[10px] text-[rgba(23,23,23,0.6)] font-medium mt-0.5">
             Giao dịch
           </div>
         </div>

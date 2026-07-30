@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Calendar,
   FileSpreadsheet,
@@ -17,10 +17,16 @@ import {
   Lock,
   Send,
   CreditCard,
+  CheckCircle,
 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, calculateCommission, calculateTotalSalary } from "@/lib/money";
+import { getMonthPayroll, saveMonthPayroll, StoredPayrollRow, MonthPayrollData } from "@/lib/payroll-store";
+import { addAuditLog } from "@/lib/audit-log";
+
+import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
+import { getCurrentVietnamMonthStr } from "@/lib/dates";
 
 interface PayrollRow {
   id: string;
@@ -36,87 +42,60 @@ interface PayrollRow {
   deduction: bigint;
   totalSalary: bigint;
   status: "draft" | "locked" | "published" | "paid";
+  isPaid?: boolean;
 }
 
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<"payroll" | "settings">("payroll");
-  const [selectedMonth, setSelectedMonth] = useState("Tháng 5/2024");
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showMonthPickerModal, setShowMonthPickerModal] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
+  const [globalStatus, setGlobalStatus] = useState<"draft" | "locked" | "published" | "paid">("published");
+  const [rows, setRows] = useState<PayrollRow[]>([]);
 
-  const [rows, setRows] = useState<PayrollRow[]>([
-    {
-      id: "p1",
-      name: "Minh Tùng",
-      isManager: true,
-      roleTitle: "Thợ chính",
-      baseSalary: 8000000n,
-      allowance: 1000000n,
-      commPercent: 10,
-      eligibleRevenue: 10490000n,
-      commAmount: 1049000n,
-      bonus: 0n,
-      deduction: 0n,
-      totalSalary: 10049000n,
-      status: "published",
-    },
-    {
-      id: "p2",
-      name: "Hoàng Nam",
-      roleTitle: "Thợ chính",
-      baseSalary: 8000000n,
-      allowance: 800000n,
-      commPercent: 10,
-      eligibleRevenue: 8730000n,
-      commAmount: 873000n,
-      bonus: 0n,
-      deduction: 0n,
-      totalSalary: 9673000n,
-      status: "published",
-    },
-    {
-      id: "p3",
-      name: "Quang Huy",
-      roleTitle: "Thợ phụ",
-      baseSalary: 6000000n,
-      allowance: 500000n,
-      commPercent: 8,
-      eligibleRevenue: 6290000n,
-      commAmount: 503200n,
-      bonus: 0n,
-      deduction: 0n,
-      totalSalary: 7003200n,
-      status: "published",
-    },
-    {
-      id: "p4",
-      name: "Đức Anh",
-      roleTitle: "Thợ phụ",
-      baseSalary: 6000000n,
-      allowance: 500000n,
-      commPercent: 8,
-      eligibleRevenue: 5340000n,
-      commAmount: 427200n,
-      bonus: 0n,
-      deduction: 0n,
-      totalSalary: 6927200n,
-      status: "published",
-    },
-    {
-      id: "p5",
-      name: "Tuấn Kiệt",
-      roleTitle: "Thực tập",
-      baseSalary: 4000000n,
-      allowance: 300000n,
-      commPercent: 5,
-      eligibleRevenue: 4050000n,
-      commAmount: 202500n,
-      bonus: 0n,
-      deduction: 0n,
-      totalSalary: 4502500n,
-      status: "published",
-    },
-  ]);
+  // Load persisted payroll data on month change or initial render
+  useEffect(() => {
+    const data = getMonthPayroll(selectedMonth);
+    setGlobalStatus(data.globalStatus);
+    const convertedRows: PayrollRow[] = data.rows.map((r) => ({
+      ...r,
+      baseSalary: BigInt(r.baseSalary || "0"),
+      allowance: BigInt(r.allowance || "0"),
+      eligibleRevenue: BigInt(r.eligibleRevenue || "0"),
+      commAmount: BigInt(r.commAmount || "0"),
+      bonus: BigInt(r.bonus || "0"),
+      deduction: BigInt(r.deduction || "0"),
+      totalSalary: BigInt(r.totalSalary || "0"),
+      status: r.status || data.globalStatus,
+      isPaid: r.isPaid ?? (r.status === "paid" || data.globalStatus === "paid"),
+    }));
+    setRows(convertedRows);
+  }, [selectedMonth]);
+
+  // Helper to persist updated rows back to storage
+  const persistPayroll = (updatedRows: PayrollRow[], newGlobalStatus: "draft" | "locked" | "published" | "paid") => {
+    setRows(updatedRows);
+    setGlobalStatus(newGlobalStatus);
+    const storedRows: StoredPayrollRow[] = updatedRows.map((r) => ({
+      ...r,
+      baseSalary: r.baseSalary.toString(),
+      allowance: r.allowance.toString(),
+      eligibleRevenue: r.eligibleRevenue.toString(),
+      commAmount: r.commAmount.toString(),
+      bonus: r.bonus.toString(),
+      deduction: r.deduction.toString(),
+      totalSalary: r.totalSalary.toString(),
+      status: r.status,
+      isPaid: r.isPaid,
+    }));
+    saveMonthPayroll({
+      month: selectedMonth,
+      globalStatus: newGlobalStatus,
+      updatedAt: new Date().toISOString(),
+      rows: storedRows,
+    });
+  };
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -131,7 +110,6 @@ export default function PayrollPage() {
   const totalShopRevenue = rows.reduce((acc, r) => acc + r.eligibleRevenue, 0n);
 
   const handleGeneratePayroll = () => {
-    // Generate fresh payroll for selected month
     const updated = rows.map((r) => {
       const comm = calculateCommission(r.eligibleRevenue, r.commPercent);
       const total = calculateTotalSalary(r.baseSalary, r.allowance, comm, r.bonus, r.deduction);
@@ -140,22 +118,63 @@ export default function PayrollPage() {
         commAmount: comm,
         totalSalary: total,
         status: "draft" as const,
+        isPaid: false,
       };
     });
-    setRows(updated);
+    persistPayroll(updated, "draft");
     setShowCreateModal(false);
+    addAuditLog({
+      action: "PAYROLL_CREATED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã tạo mới bảng lương nháp cho ${selectedMonth}`,
+    });
     triggerToast(`Đã tạo bảng lương nháp cho ${selectedMonth}!`);
   };
 
   const handleStatusChange = (newStatus: "locked" | "published" | "paid") => {
-    setRows((prev) => prev.map((r) => ({ ...r, status: newStatus })));
+    const updated = rows.map((r) => ({
+      ...r,
+      status: newStatus,
+      isPaid: newStatus === "paid" ? true : r.isPaid,
+    }));
+    persistPayroll(updated, newStatus);
+
     const statusText =
       newStatus === "locked"
         ? "Khóa bảng lương"
         : newStatus === "published"
         ? "Công bố bảng lương cho nhân viên"
-        : "Đánh dấu đã thanh toán";
+        : "Đánh dấu đã thanh toán toàn bộ";
+
+    addAuditLog({
+      action: newStatus === "paid" ? "PAYROLL_PAID" : newStatus === "published" ? "PAYROLL_PUBLISHED" : "PAYROLL_LOCKED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã thực hiện: ${statusText} cho ${selectedMonth}`,
+    });
     triggerToast(`Đã ${statusText} thành công!`);
+  };
+
+  const toggleSingleEmployeePaid = (employeeId: string) => {
+    const updated = rows.map((r) => {
+      if (r.id === employeeId) {
+        const nextPaid = !r.isPaid;
+        return {
+          ...r,
+          isPaid: nextPaid,
+          status: nextPaid ? ("paid" as const) : globalStatus,
+        };
+      }
+      return r;
+    });
+
+    const allPaid = updated.every((r) => r.isPaid);
+    const newGlobal = allPaid ? "paid" : globalStatus;
+
+    persistPayroll(updated, newGlobal);
+    const emp = rows.find((r) => r.id === employeeId);
+    triggerToast(`Đã cập nhật trạng thái thanh toán cho ${emp?.name || "nhân viên"}!`);
   };
 
   const handleExportExcel = () => {
@@ -225,12 +244,8 @@ export default function PayrollPage() {
             <span>Kỳ lương: <strong className="text-[#741F2C]">{selectedMonth}</strong></span>
           </div>
           <button
-            onClick={() => {
-              const months = ["Tháng 5/2024", "Tháng 6/2024", "Tháng 7/2024"];
-              const nextIndex = (months.indexOf(selectedMonth) + 1) % months.length;
-              setSelectedMonth(months[nextIndex]);
-            }}
-            className="bg-white border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3.5 py-2 text-xs font-semibold text-[#171717] flex items-center space-x-1.5 active:scale-95"
+            onClick={() => setShowMonthPickerModal(true)}
+            className="bg-white border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3.5 py-2 text-xs font-semibold text-[#171717] flex items-center space-x-1.5 active:scale-95 shadow-sm hover:border-[#741F2C]"
           >
             <Calendar className="w-4 h-4 text-[#741F2C]" />
             <span>Đổi kỳ</span>
@@ -285,7 +300,7 @@ export default function PayrollPage() {
             {/* Action Bar for Status & Creation */}
             <div className="flex flex-wrap gap-2 justify-between items-center bg-white p-2.5 rounded-[12px] border border-[rgba(23,23,23,0.12)]">
               <div className="flex items-center space-x-1">
-                {currentStatus === "draft" && (
+                {globalStatus === "draft" && (
                   <button
                     onClick={() => handleStatusChange("locked")}
                     className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-amber-600 text-amber-700"
@@ -294,7 +309,7 @@ export default function PayrollPage() {
                     <span>Khóa bảng lương</span>
                   </button>
                 )}
-                {currentStatus === "locked" && (
+                {globalStatus === "locked" && (
                   <button
                     onClick={() => handleStatusChange("published")}
                     className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1"
@@ -303,18 +318,19 @@ export default function PayrollPage() {
                     <span>Công bố cho nhân viên</span>
                   </button>
                 )}
-                {currentStatus === "published" && (
+                {globalStatus === "published" && (
                   <button
                     onClick={() => handleStatusChange("paid")}
-                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-blue-600 text-blue-700"
+                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-blue-600 text-blue-700 hover:bg-blue-50"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
-                    <span>Đánh dấu đã thanh toán</span>
+                    <span>Thanh toán tất cả</span>
                   </button>
                 )}
-                {currentStatus === "paid" && (
-                  <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1 rounded-md">
-                    ✓ ĐÃ THANH TOÁN
+                {globalStatus === "paid" && (
+                  <span className="text-xs font-bold text-blue-700 bg-blue-50 px-2.5 py-1.5 rounded-md flex items-center space-x-1">
+                    <CheckCircle className="w-3.5 h-3.5 text-blue-700" />
+                    <span>TẤT CẢ ĐÃ THANH TOÁN</span>
                   </span>
                 )}
               </div>
@@ -332,13 +348,71 @@ export default function PayrollPage() {
                   className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>Tạo bảng lương</span>
+                  <span>Tạo mới</span>
                 </button>
               </div>
             </div>
 
-            {/* Section: BẢNG LƯƠNG NHÂN VIÊN */}
-            <div className="space-y-2.5">
+            {/* Mobile View: Cards list for individual employee salary details */}
+            <div className="space-y-3 block sm:hidden">
+              {rows.map((r) => (
+                <div
+                  key={r.id}
+                  className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-3.5 shadow-sm space-y-2"
+                >
+                  <div className="flex justify-between items-center border-b border-[rgba(23,23,23,0.06)] pb-2">
+                    <div>
+                      <div className="font-bold text-[#171717] text-sm flex items-center space-x-1">
+                        <span>{r.name}</span>
+                        {r.isManager && <Crown className="w-3.5 h-3.5 text-[#741F2C] fill-[#741F2C]" />}
+                      </div>
+                      <div className="text-[11px] text-[rgba(23,23,23,0.5)] font-medium">{r.roleTitle}</div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleSingleEmployeePaid(r.id)}
+                      className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center space-x-1 transition-colors ${
+                        r.isPaid
+                          ? "bg-blue-100 text-blue-800 border border-blue-200"
+                          : "bg-amber-50 text-amber-800 border border-amber-200 hover:bg-emerald-50 hover:text-emerald-800"
+                      }`}
+                    >
+                      {r.isPaid ? (
+                        <>
+                          <CheckCircle className="w-3 h-3 text-blue-700" />
+                          <span>Đã thanh toán</span>
+                        </>
+                      ) : (
+                        <span>Đánh dấu đã TT</span>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <span className="text-[rgba(23,23,23,0.5)] block">Lương cứng</span>
+                      <span className="font-semibold text-[#171717]">{formatVND(r.baseSalary)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[rgba(23,23,23,0.5)] block">Phụ cấp</span>
+                      <span className="font-semibold text-[#171717]">{formatVND(r.allowance)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[rgba(23,23,23,0.5)] block">Hoa hồng ({r.commPercent}%)</span>
+                      <span className="font-semibold text-[#171717]">{formatVND(r.commAmount)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[rgba(23,23,23,0.5)] block">Tổng thu nhập</span>
+                      <span className="font-extrabold text-[#741F2C] text-sm">{formatVND(r.totalSalary)}</span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop / Tablet View: Table */}
+            <div className="space-y-2.5 hidden sm:block">
               <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse min-w-[520px]">
@@ -374,26 +448,21 @@ export default function PayrollPage() {
                             {formatVND(r.totalSalary)}
                           </td>
                           <td className="py-3 px-2 text-center">
-                            {r.status === "published" && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 whitespace-nowrap">
-                                Đã công bố
-                              </span>
-                            )}
-                            {r.status === "paid" && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 whitespace-nowrap">
-                                Đã thanh toán
-                              </span>
-                            )}
-                            {r.status === "locked" && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap">
-                                Đã khóa
-                              </span>
-                            )}
-                            {r.status === "draft" && (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-700 whitespace-nowrap">
-                                Bản nháp
-                              </span>
-                            )}
+                            <button
+                              type="button"
+                              onClick={() => toggleSingleEmployeePaid(r.id)}
+                              className="cursor-pointer focus:outline-none"
+                            >
+                              {r.isPaid ? (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 whitespace-nowrap inline-flex items-center space-x-1">
+                                  <span>✓ Đã thanh toán</span>
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-100 text-amber-800 whitespace-nowrap hover:bg-emerald-100 hover:text-emerald-800">
+                                  Chờ thanh toán
+                                </span>
+                              )}
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -593,6 +662,18 @@ export default function PayrollPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Month Picker Calendar Modal */}
+      {showMonthPickerModal && (
+        <PayrollMonthPickerModal
+          currentMonthStr={selectedMonth}
+          onClose={() => setShowMonthPickerModal(false)}
+          onSelectMonth={(m) => {
+            setSelectedMonth(m);
+            triggerToast(`Đã chuyển kỳ lương sang ${m}`);
+          }}
+        />
       )}
 
       <AdminBottomNav />

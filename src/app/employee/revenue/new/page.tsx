@@ -7,6 +7,8 @@ import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 import { getVietnamBusinessDate, formatTimeDisplay } from "@/lib/dates";
 import { saveOfflineRevenue } from "@/lib/offline/idb";
+import { addAuditLog } from "@/lib/audit-log";
+import { getAuthSession } from "@/lib/auth";
 
 export default function RecordRevenuePage() {
   const router = useRouter();
@@ -32,6 +34,8 @@ export default function RecordRevenuePage() {
     const idempotency_key = crypto.randomUUID();
     const business_date = getVietnamBusinessDate();
     const performed_at = new Date().toISOString();
+    const currentSession = getAuthSession();
+    const actorName = currentSession?.fullName || "Nhân viên";
 
     const payload = {
       idempotency_key,
@@ -45,6 +49,13 @@ export default function RecordRevenuePage() {
       sync_status: "pending" as const,
     };
 
+    addAuditLog({
+      action: "REVENUE_RECORDED",
+      actorName,
+      actorRole: "employee",
+      details: `Đã ghi doanh thu ${formatVND(numericAmount)} (${paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"}) cho dịch vụ "${serviceName || "Dịch vụ tóc"}"`,
+    });
+
     try {
       if (!navigator.onLine) {
         // Save offline
@@ -53,7 +64,7 @@ export default function RecordRevenuePage() {
         setTimeout(() => router.push("/employee"), 1200);
       } else {
         // Online submit simulation
-        await new Promise((resolve) => setTimeout(resolve, 600));
+        await new Promise((resolve) => setTimeout(resolve, 400));
         setSuccess(true);
         setTimeout(() => router.push("/employee"), 1000);
       }

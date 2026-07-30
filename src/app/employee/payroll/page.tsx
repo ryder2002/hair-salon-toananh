@@ -1,17 +1,32 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Wallet, Calendar, CheckCircle2 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { formatVND } from "@/lib/money";
+import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
+import { getCurrentVietnamMonthStr } from "@/lib/dates";
+import { getMonthPayroll, StoredPayrollRow } from "@/lib/payroll-store";
 
 export default function EmployeePayrollPage() {
-  const [selectedMonth, setSelectedMonth] = useState("Tháng 5/2024");
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
+  const [showMonthPickerModal, setShowMonthPickerModal] = useState(false);
+  const [isPaid, setIsPaid] = useState(false);
+  const [totalSalary, setTotalSalary] = useState(10549000n);
+
+  useEffect(() => {
+    const data = getMonthPayroll(selectedMonth);
+    const empRow = data.rows.find((r: StoredPayrollRow) => r.name.includes("Minh") || r.id === "p1") || data.rows[0];
+    if (empRow) {
+      setIsPaid(empRow.isPaid || data.globalStatus === "paid");
+      setTotalSalary(BigInt(empRow.totalSalary || "10549000"));
+    }
+  }, [selectedMonth]);
 
   const payrollSlip = {
-    month: "Tháng 5/2024",
-    status: "published", // published | paid
+    month: selectedMonth,
+    status: isPaid ? "paid" : "published",
     employeeName: "Minh Quân",
     jobTitle: "Quản lý tiệm",
     baseSalary: 8000000n,
@@ -21,7 +36,7 @@ export default function EmployeePayrollPage() {
     commissionAmount: 1049000n,
     bonus: 500000n,
     deduction: 0n,
-    totalSalary: 10549000n,
+    totalSalary: totalSalary,
     publishedAt: "20/05/2024 08:30",
   };
 
@@ -36,9 +51,12 @@ export default function EmployeePayrollPage() {
             <Calendar className="w-4 h-4 text-[#741F2C]" />
             <span>Kỳ lương: <strong className="text-[#741F2C]">{payrollSlip.month}</strong></span>
           </div>
-          <span className="px-2.5 py-1 rounded-md bg-emerald-100 text-emerald-800 text-[10px] font-bold">
-            ✓ ĐÃ CÔNG BỐ
-          </span>
+          <button
+            onClick={() => setShowMonthPickerModal(true)}
+            className="px-2.5 py-1 rounded-md bg-[#741F2C] text-white text-[10px] font-bold active:scale-95 transition-transform"
+          >
+            Đổi kỳ
+          </button>
         </div>
 
         {/* Total Highlight Card */}
@@ -96,6 +114,15 @@ export default function EmployeePayrollPage() {
           </div>
         </div>
       </main>
+
+      {/* Month Picker Calendar Modal */}
+      {showMonthPickerModal && (
+        <PayrollMonthPickerModal
+          currentMonthStr={selectedMonth}
+          onClose={() => setShowMonthPickerModal(false)}
+          onSelectMonth={(m) => setSelectedMonth(m)}
+        />
+      )}
 
       <EmployeeBottomNav />
     </div>

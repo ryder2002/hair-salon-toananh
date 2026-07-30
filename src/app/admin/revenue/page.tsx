@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, Filter, CalendarCheck, X, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
@@ -8,6 +8,8 @@ import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
+import { addAuditLog } from "@/lib/audit-log";
+import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
 
 export default function RevenueManagementPage() {
   const [activeFilter, setActiveFilter] = useState("today");
@@ -17,6 +19,15 @@ export default function RevenueManagementPage() {
   const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
+
+  useEffect(() => {
+    const current = getDayClosingState();
+    setIsClosed(current.isClosed);
+    const unsubscribe = subscribeDayClosing((state) => {
+      setIsClosed(state.isClosed);
+    });
+    return () => unsubscribe();
+  }, []);
 
   const [transactions, setTransactions] = useState<TransactionItem[]>([
     {
@@ -91,6 +102,12 @@ export default function RevenueManagementPage() {
     setTransactions((prev) =>
       prev.map((t) => (t.id === selectedTx.id ? { ...t, status: "voided" } : t))
     );
+    addAuditLog({
+      action: "REVENUE_VOIDED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
+    });
     setShowVoidModal(false);
     setSelectedTx(null);
     setVoidReason("");
@@ -98,7 +115,13 @@ export default function RevenueManagementPage() {
   };
 
   const handleConfirmCloseDay = () => {
-    setIsClosed(true);
+    setDayClosingState(true);
+    addAuditLog({
+      action: "DAY_CLOSED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã chốt ngày doanh thu hôm nay (Tổng doanh thu: ${formatVND(totalRevenue)}, ${recordedTxs.length} giao dịch)`,
+    });
     setShowCloseModal(false);
     triggerToast("Đã chốt ngày doanh thu thành công!");
   };
@@ -185,7 +208,13 @@ export default function RevenueManagementPage() {
           <button
             onClick={() => {
               if (isClosed) {
-                setIsClosed(false);
+                setDayClosingState(false);
+                addAuditLog({
+                  action: "DAY_REOPENED",
+                  actorName: "Admin Manager",
+                  actorRole: "admin",
+                  details: "Đã mở lại ngày làm việc tại trang Quản lý doanh thu",
+                });
                 triggerToast("Đã mở lại ngày làm việc!");
               } else {
                 setShowCloseModal(true);

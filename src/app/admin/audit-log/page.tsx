@@ -1,49 +1,31 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, ShieldAlert } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Search } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
-
-interface AuditLogEntry {
-  id: string;
-  action: string;
-  actorName: string;
-  details: string;
-  time: string;
-}
+import { getAuditLogs, AuditLogEntry } from "@/lib/audit-log";
 
 export default function AuditLogPage() {
-  const logs: AuditLogEntry[] = [
-    {
-      id: "a1",
-      action: "REVENUE_VOIDED",
-      actorName: "Admin Manager",
-      details: "Đã hủy giao dịch 300.000 đ của Hoàng Long (Lý do: Thao tác nhầm)",
-      time: "22/05/2025 17:32",
-    },
-    {
-      id: "a2",
-      action: "PAYROLL_PUBLISHED",
-      actorName: "Admin Manager",
-      details: "Đã công bố bảng lương kỳ Tháng 5/2024 cho toàn bộ nhân viên",
-      time: "20/05/2024 20:30",
-    },
-    {
-      id: "a3",
-      action: "DAY_CLOSED",
-      actorName: "Admin Manager",
-      details: "Đã chốt ngày 21/05/2025 (Tổng doanh thu: 12.560.000 đ)",
-      time: "21/05/2025 21:10",
-    },
-    {
-      id: "a4",
-      action: "STAFF_CREATED",
-      actorName: "Admin Manager",
-      details: "Đã tạo tài khoản nhân viên mới cho Bảo Nam (Chức vụ: Thợ cắt tóc)",
-      time: "18/05/2025 18:45",
-    },
-  ];
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    setLogs(getAuditLogs());
+  }, []);
+
+  const filteredLogs = logs.filter((l) =>
+    l.details.toLowerCase().includes(search.toLowerCase()) ||
+    l.action.toLowerCase().includes(search.toLowerCase()) ||
+    l.actorName.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const getActionBadgeColor = (action: string) => {
+    if (action.includes("DELETED") || action.includes("VOIDED")) return "bg-red-100 text-red-800 border-red-200";
+    if (action.includes("LOGIN") || action.includes("RECORDED")) return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    if (action.includes("CLOSED") || action.includes("LOCKED")) return "bg-amber-100 text-amber-800 border-amber-200";
+    return "bg-blue-100 text-blue-800 border-blue-200";
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-24 max-w-md mx-auto relative shadow-xl">
@@ -55,8 +37,9 @@ export default function AuditLogPage() {
           >
             <ArrowLeft className="w-6 h-6" />
           </Link>
-          <h1 className="text-xl font-bold text-[#171717] tracking-tight">
-            Nhật ký hoạt động
+          <h1 className="text-xl font-bold text-[#171717] tracking-tight flex items-center space-x-1.5">
+            <ShieldCheck className="w-5 h-5 text-[#741F2C]" />
+            <span>Nhật ký hoạt động</span>
           </h1>
           <div className="w-6" />
         </div>
@@ -64,23 +47,46 @@ export default function AuditLogPage() {
 
       <main className="px-4 pt-3 space-y-3">
         <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
-          Mọi thao tác sửa, hủy, mở khóa và chốt dữ liệu đều được ghi lại tự động.
+          Mọi thao tác đăng nhập, xóa tài khoản, hủy giao dịch và chốt ngày đều được lưu vết tự động.
         </div>
 
-        <div className="space-y-2.5">
-          {logs.map((l) => (
-            <div
-              key={l.id}
-              className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-3.5 shadow-sm space-y-1"
-            >
-              <div className="flex justify-between items-center text-xs">
-                <span className="font-bold text-[#741F2C]">{l.action}</span>
-                <span className="text-[11px] text-[rgba(23,23,23,0.5)] font-medium">{l.time}</span>
-              </div>
-              <p className="text-xs font-semibold text-[#171717]">{l.details}</p>
-              <div className="text-[11px] text-[rgba(23,23,23,0.5)]">Thực hiện bởi: {l.actorName}</div>
+        {/* Search input */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-[rgba(23,23,23,0.4)] absolute left-3.5 top-3" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Tìm kiếm theo hành động, nhân viên..."
+            className="w-full bg-white border border-[rgba(23,23,23,0.14)] rounded-[12px] pl-10 pr-4 py-2.5 text-xs text-[#171717] placeholder-[rgba(23,23,23,0.4)] focus:outline-none focus:border-[#741F2C]"
+          />
+        </div>
+
+        <div className="space-y-2.5 pt-1">
+          {filteredLogs.length === 0 ? (
+            <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-6 text-center text-xs text-[rgba(23,23,23,0.5)]">
+              Chưa có nhật ký hoạt động nào phù hợp.
             </div>
-          ))}
+          ) : (
+            filteredLogs.map((l) => (
+              <div
+                key={l.id}
+                className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-3.5 shadow-sm space-y-1.5"
+              >
+                <div className="flex justify-between items-center text-xs">
+                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase border ${getActionBadgeColor(l.action)}`}>
+                    {l.action}
+                  </span>
+                  <span className="text-[11px] text-[rgba(23,23,23,0.5)] font-medium">{l.timestamp}</span>
+                </div>
+                <p className="text-xs font-semibold text-[#171717] leading-snug">{l.details}</p>
+                <div className="text-[11px] text-[rgba(23,23,23,0.5)] flex items-center justify-between border-t border-[rgba(23,23,23,0.06)] pt-1.5 mt-1">
+                  <span>Thực hiện bởi: <strong className="text-[#171717]">{l.actorName}</strong></span>
+                  {l.actorRole && <span className="capitalize text-[10px] bg-gray-100 px-1.5 py-0.5 rounded font-mono">{l.actorRole}</span>}
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </main>
 
@@ -88,3 +94,4 @@ export default function AuditLogPage() {
     </div>
   );
 }
+
