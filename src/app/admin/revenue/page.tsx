@@ -1,0 +1,324 @@
+"use client";
+
+import React, { useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Filter, CalendarCheck, X, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { MobileHeader } from "@/components/layout/MobileHeader";
+import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
+import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
+import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
+import { formatVND } from "@/lib/money";
+
+export default function RevenueManagementPage() {
+  const [activeFilter, setActiveFilter] = useState("today");
+  const [isClosed, setIsClosed] = useState(false);
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [showVoidModal, setShowVoidModal] = useState(false);
+  const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
+  const [voidReason, setVoidReason] = useState("");
+  const [toastMsg, setToastMsg] = useState("");
+
+  const [transactions, setTransactions] = useState<TransactionItem[]>([
+    {
+      id: "r1",
+      staffName: "Hoàng Long",
+      avatarType: "scissors",
+      serviceName: "Cạo mặt + Gội đầu",
+      amount: 120000n,
+      paymentMethod: "cash",
+      time: "09:35",
+      status: "recorded",
+    },
+    {
+      id: "r2",
+      staffName: "Minh Quân",
+      avatarType: "mustache",
+      serviceName: "Cắt tóc + Gội đầu",
+      amount: 250000n,
+      paymentMethod: "cash",
+      time: "09:12",
+      status: "recorded",
+    },
+    {
+      id: "r3",
+      staffName: "Đức Anh",
+      avatarType: "comb",
+      serviceName: "Cắt tóc",
+      amount: 180000n,
+      paymentMethod: "bank_transfer",
+      time: "08:47",
+      status: "recorded",
+    },
+    {
+      id: "r4",
+      staffName: "Bảo Nam",
+      avatarType: "scissors",
+      serviceName: "Uốn tóc",
+      amount: 350000n,
+      paymentMethod: "bank_transfer",
+      time: "08:20",
+      status: "recorded",
+    },
+    {
+      id: "r5",
+      staffName: "Hoàng Long",
+      avatarType: "mustache",
+      serviceName: "Nhuộm tóc",
+      amount: 300000n,
+      paymentMethod: "cash",
+      time: "07:55",
+      status: "voided",
+    },
+  ]);
+
+  const triggerToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(""), 3000);
+  };
+
+  const recordedTxs = transactions.filter((t) => t.status === "recorded");
+  const cashTotal = recordedTxs
+    .filter((t) => t.paymentMethod === "cash")
+    .reduce((acc, t) => acc + BigInt(t.amount), 0n);
+  const bankTotal = recordedTxs
+    .filter((t) => t.paymentMethod === "bank_transfer")
+    .reduce((acc, t) => acc + BigInt(t.amount), 0n);
+  const totalRevenue = cashTotal + bankTotal;
+
+  const handleVoidTx = () => {
+    if (!selectedTx || !voidReason) return;
+
+    setTransactions((prev) =>
+      prev.map((t) => (t.id === selectedTx.id ? { ...t, status: "voided" } : t))
+    );
+    setShowVoidModal(false);
+    setSelectedTx(null);
+    setVoidReason("");
+    triggerToast("Đã hủy giao dịch thành công!");
+  };
+
+  const handleConfirmCloseDay = () => {
+    setIsClosed(true);
+    setShowCloseModal(false);
+    triggerToast("Đã chốt ngày doanh thu thành công!");
+  };
+
+  return (
+    <div className="min-h-screen bg-[#F7F3EC] pb-28 max-w-md mx-auto relative shadow-xl">
+      {/* Header matching Image 3 with Unified Logo & Notification Bell */}
+      <MobileHeader title="Quản lý doanh thu" subtitle="The Gentlemen Barbershop" unreadCount={5} />
+
+      <main className="px-4 pt-3 space-y-4">
+        {toastMsg && (
+          <div className="bg-[#741F2C] text-white p-3 rounded-[10px] text-xs font-bold text-center shadow-lg">
+            {toastMsg}
+          </div>
+        )}
+
+        {/* Filter Pills Row */}
+        <div className="flex space-x-2 overflow-x-auto pb-1 scrollbar-none">
+          <button
+            onClick={() => setActiveFilter("today")}
+            className={`px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap transition-colors ${
+              activeFilter === "today"
+                ? "bg-[#741F2C] text-white"
+                : "bg-white border border-[rgba(23,23,23,0.2)] text-[#171717]"
+            }`}
+          >
+            Hôm nay ∨
+          </button>
+          <button
+            onClick={() => setActiveFilter("employee")}
+            className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white border border-[rgba(23,23,23,0.2)] text-[#171717]"
+          >
+            Nhân viên ∨
+          </button>
+          <button
+            onClick={() => setActiveFilter("payment")}
+            className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white border border-[rgba(23,23,23,0.2)] text-[#171717]"
+          >
+            Thanh toán ∨
+          </button>
+          <button
+            onClick={() => setActiveFilter("status")}
+            className="px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-white border border-[rgba(23,23,23,0.2)] text-[#171717]"
+          >
+            Trạng thái ∨
+          </button>
+        </div>
+
+        {/* 4 KPI Cards */}
+        <KpiCardsRow
+          totalRevenue={totalRevenue}
+          cashTotal={cashTotal}
+          bankTotal={bankTotal}
+          transactionCount={recordedTxs.length}
+        />
+
+        {/* Transactions List */}
+        <div className="pt-1 space-y-2.5">
+          <div className="flex justify-between items-center text-xs font-bold text-[#171717]">
+            <span>DANH SÁCH GIAO DỊCH HÔM NAY</span>
+            <span className="text-[rgba(23,23,23,0.5)]">Nhấn vào giao dịch để quản lý</span>
+          </div>
+
+          <div className="space-y-2">
+            {transactions.map((t) => (
+              <div
+                key={t.id}
+                onClick={() => {
+                  if (t.status === "recorded") {
+                    setSelectedTx(t);
+                    setShowVoidModal(true);
+                  }
+                }}
+                className="cursor-pointer"
+              >
+                <RecentTransactionsList transactions={[t]} showStatusBadge={true} />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Action Button: Chốt ngày */}
+        <div className="pt-2">
+          <button
+            onClick={() => {
+              if (isClosed) {
+                setIsClosed(false);
+                triggerToast("Đã mở lại ngày làm việc!");
+              } else {
+                setShowCloseModal(true);
+              }
+            }}
+            className={`w-full py-3.5 rounded-[12px] font-bold text-base flex items-center justify-center space-x-2 shadow-md active:scale-98 transition-transform ${
+              isClosed ? "bg-gray-700 text-white" : "bg-[#741F2C] text-white"
+            }`}
+          >
+            <CalendarCheck className="w-5 h-5" />
+            <span>{isClosed ? "MỞ LẠI NGÀY DOANH THU" : "CHỐT NGÀY DOANH THU"}</span>
+          </button>
+        </div>
+      </main>
+
+      {/* Modal Confirmation Void Transaction */}
+      {showVoidModal && selectedTx && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[16px] max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+            <button
+              onClick={() => setShowVoidModal(false)}
+              className="absolute right-4 top-4 text-[rgba(23,23,23,0.4)] hover:text-[#171717]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2 text-red-600">
+              <AlertTriangle className="w-6 h-6" />
+              <h3 className="font-bold text-lg text-[#171717]">Hủy giao dịch doanh thu</h3>
+            </div>
+
+            <div className="bg-red-50 p-3 rounded-[10px] text-xs space-y-1">
+              <div>Thợ thực hiện: <strong className="text-[#171717]">{selectedTx.staffName}</strong></div>
+              <div>Dịch vụ: <strong className="text-[#171717]">{selectedTx.serviceName}</strong></div>
+              <div>Số tiền: <strong className="text-[#741F2C] font-bold text-sm">{formatVND(selectedTx.amount)}</strong></div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-[rgba(23,23,23,0.7)]">
+                Lý do hủy giao dịch *
+              </label>
+              <textarea
+                value={voidReason}
+                onChange={(e) => setVoidReason(e.target.value)}
+                placeholder="Nhập lý do hủy (ví dụ: Thao tác nhầm, Khách đổi dịch vụ)..."
+                rows={2}
+                className="w-full bg-[#F7F3EC] border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3 py-2 text-xs text-[#171717] focus:outline-none focus:border-[#741F2C]"
+              />
+            </div>
+
+            <div className="flex space-x-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowVoidModal(false)}
+                className="flex-1 btn-outline py-2.5 text-xs font-bold rounded-[10px]"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                disabled={!voidReason}
+                onClick={handleVoidTx}
+                className={`flex-1 py-2.5 text-xs font-bold rounded-[10px] bg-red-700 text-white ${
+                  !voidReason ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                Xác nhận Hủy
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirm Close Day */}
+      {showCloseModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-[16px] max-w-sm w-full p-5 space-y-4 relative shadow-2xl">
+            <button
+              onClick={() => setShowCloseModal(false)}
+              className="absolute right-4 top-4 text-[rgba(23,23,23,0.4)] hover:text-[#171717]"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-2 text-[#741F2C]">
+              <CalendarCheck className="w-6 h-6" />
+              <h3 className="font-bold text-lg text-[#171717]">Xác nhận chốt ngày</h3>
+            </div>
+
+            <div className="bg-[#F7F3EC] p-3 rounded-[10px] text-xs space-y-1.5">
+              <div className="flex justify-between">
+                <span>Số giao dịch hợp lệ:</span>
+                <strong className="font-bold text-[#171717]">{recordedTxs.length} giao dịch</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Tiền mặt:</span>
+                <strong className="font-bold text-[#171717]">{formatVND(cashTotal)}</strong>
+              </div>
+              <div className="flex justify-between">
+                <span>Chuyển khoản:</span>
+                <strong className="font-bold text-[#171717]">{formatVND(bankTotal)}</strong>
+              </div>
+              <div className="flex justify-between border-t border-[rgba(23,23,23,0.1)] pt-1.5 font-bold text-sm text-[#741F2C]">
+                <span>TỔNG DOANH THU:</span>
+                <span>{formatVND(totalRevenue)}</span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-[rgba(23,23,23,0.5)]">
+              Sau khi chốt ngày, nhân viên sẽ không thể tự chỉnh sửa hoặc thêm giao dịch thuộc ngày này.
+            </p>
+
+            <div className="flex space-x-2 pt-1">
+              <button
+                type="button"
+                onClick={() => setShowCloseModal(false)}
+                className="flex-1 btn-outline py-2.5 text-xs font-bold rounded-[10px]"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCloseDay}
+                className="flex-1 btn-primary py-2.5 text-xs font-bold rounded-[10px]"
+              >
+                Xác nhận Chốt ngày
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AdminBottomNav />
+    </div>
+  );
+}

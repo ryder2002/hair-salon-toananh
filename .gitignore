@@ -1,0 +1,40 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Next.js build output
+/.next/
+/out/
+/build
+/dist
+
+# Environment variables & secrets (CRITICAL FOR SECURITY)
+.env
+.env*.local
+.env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+
+# Temp & System files
+~
+.DS_Store
+*.pem
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Vercel
+.vercel
+
+# IDE & Editor files
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
