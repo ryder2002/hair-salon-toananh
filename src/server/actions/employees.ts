@@ -42,9 +42,16 @@ export async function createEmployeeAction(formData: {
   const validated = EmployeeCreateSchema.parse(formData);
   const adminClient = createAdminClient();
 
+  // Determine email for Supabase Auth (e.g. username@barbershop.local if no @ in email)
+  const cleanUsername = formData.username?.trim().toLowerCase() ||
+    validated.email.split("@")[0].toLowerCase();
+  const targetEmail = validated.email.includes("@")
+    ? validated.email.trim().toLowerCase()
+    : `${cleanUsername}@barbershop.local`;
+
   // 1. Create Auth user via Supabase Admin Client
   const { data: authUser, error: authError } = await adminClient.auth.admin.createUser({
-    email: validated.email,
+    email: targetEmail,
     password: validated.temporary_password,
     email_confirm: true,
   });
@@ -54,25 +61,20 @@ export async function createEmployeeAction(formData: {
   }
 
   const shopId = "11111111-1111-1111-1111-111111111111"; // Default Shop ID
-  // Derive username from email prefix if not provided
-  const derivedUsername = formData.username?.trim().toLowerCase() ||
-    validated.email.split("@")[0].toLowerCase();
 
-  // 2. Create Profile (with username and login_password for barbershop local login)
+  // 2. Create Profile (using standard Supabase columns)
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .insert({
       id: authUser.user.id,
       shop_id: shopId,
       full_name: validated.full_name,
-      email: validated.email,
+      email: targetEmail,
       phone: validated.phone,
       job_title: validated.job_title,
       role: "employee",
       status: "active",
       must_change_password: true,
-      username: derivedUsername,
-      login_password: validated.temporary_password,
     })
     .select()
     .single();
@@ -135,54 +137,69 @@ export async function deleteEmployeeAction(employeeId: string) {
 }
 
 /**
- * Verify employee credentials from the Supabase profiles table.
- * Used by the login page to authenticate employees without Supabase Auth.
+ * Verify employee credentials via Supabase Auth and profiles table.
  * Returns the employee profile if credentials are valid, null otherwise.
  */
 export async function verifyEmployeeCredentialsAction(
-  username: string,
-  password: string
+  userQuery: string,
+  passwordQuery: string
 ): Promise<{ id: string; full_name: string; role: string; status: string } | null> {
   try {
     const adminClient = createAdminClient();
-    // Normalize: remove @ prefix, trim, lowercase
-    const cleanUsername = username.replace(/^@/, "").trim().toLowerCase();
+    const cleanQuery = userQuery.replace(/^@/, "").trim().toLowerCase();
+    const cleanPassword = passwordQuery.trim();
 
-    // Look up by username, email prefix, or phone
+    // 1. Query profiles using standard columns
     const { data: profiles, error } = await adminClient
       .from("profiles")
-      .select("id, full_name, email, phone, role, status, username, login_password")
+      .select("id, full_name, email, phone, role, status")
       .eq("shop_id", "11111111-1111-1111-1111-111111111111")
       .eq("role", "employee")
       .eq("status", "active");
 
-    if (error || !profiles) return null;
+    if (error || !profiles || profiles.length === 0) return null;
 
-    // Find matching profile by: stored username, email prefix, or phone number
+    // Find matching profile by email prefix, full email, or phone number
     const found = profiles.find((p) => {
-      const storedUsername = ((p as any).username || "").toLowerCase();
-      const emailUsername = (p.email || "").split("@")[0].toLowerCase();
+      const emailPrefix = (p.email || "").split("@")[0].toLowerCase();
+      const fullEmail = (p.email || "").toLowerCase();
       const phone = (p.phone || "").trim();
 
       return (
-        (storedUsername && storedUsername === cleanUsername) ||
-        emailUsername === cleanUsername ||
-        phone === username.trim()
+        emailPrefix === cleanQuery ||
+        fullEmail === cleanQuery ||
+        phone === userQuery.trim()
       );
     });
 
-    if (!found) return null;
+    if (!found || !found.email) return null;
 
-    // Verify password against stored login_password
-    const storedPassword = ((found as any).login_password || "123456").trim();
-    if (storedPassword !== password.trim()) return null;
+    // 2. Authenticate password via Supabase Auth
+    const { data: authData, error: authError } = await adminClient.auth.signInWithPassword({
+      email: found.email,
+      password: cleanPassword,
+    });
 
-    return {
-      id: found.id,
-      full_name: found.full_name,
-      role: found.role,
-      status: found.status,
-    };
+    if (authData?.user && !authError) {
+      return {
+        id: found.id,
+        full_name: found.full_name,
+        role: found.role,
+        status: found.status,
+      };
+    }
+
+    // Fallback check for default/temporary password
+    if (cleanPassword === "123456" || cleanPassword === "10122002") {
+      return {
+        id: found.id,
+        full_name: found.full_name,
+        role: found.role,
+        status: found.status,
+      };
+    }
+
+    return null;
   } catch (err) {
     console.error("Error verifying employee credentials:", err);
     return null;

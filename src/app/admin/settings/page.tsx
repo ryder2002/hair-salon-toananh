@@ -42,7 +42,7 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     setPassError("");
 
-    if (oldPassword !== "10122002") {
+    if (oldPassword !== "admin123" && oldPassword !== "10122002") {
       setPassError("Mật khẩu hiện tại không đúng!");
       return;
     }
@@ -155,37 +155,6 @@ export default function AdminSettingsPage() {
             </div>
             <ChevronRight className="w-5 h-5 text-[rgba(23,23,23,0.4)]" />
           </Link>
-
-          {/* Reset Database Button */}
-          <button
-            type="button"
-            onClick={async () => {
-              if (window.confirm("BẠN CÓ CHẮC CHẮN MỐN XÓA TOÀN BỘ DỮ LIỆU TRÊN DATABASE?\n\nThao tác này sẽ xóa tất cả doanh thu, bảng lương, phụ cấp và tài khoản nhân viên. Chỉ giữ lại tài khoản Admin (admin/admin123 & dinhcongnhat/10122002).")) {
-                const res = await clearAllDatabaseDataAction();
-                if (res.success) {
-                  setMsg(res.message || "Đã xóa sạch dữ liệu Database thành công!");
-                  if (typeof window !== "undefined") {
-                    localStorage.removeItem("barbershop_revenue_transactions");
-                    localStorage.removeItem("barbershop_employees_list");
-                    localStorage.removeItem("barbershop_app_notifications");
-                  }
-                } else {
-                  setMsg("Lỗi khi xóa dữ liệu: " + (res.error || ""));
-                }
-                setTimeout(() => setMsg(""), 4000);
-              }
-            }}
-            className="w-full p-4 flex justify-between items-center hover:bg-red-50 text-left text-red-700"
-          >
-            <div className="flex items-center space-x-3">
-              <Shield className="w-5 h-5 text-red-700" />
-              <div>
-                <div className="text-red-700 font-bold">Xóa sạch dữ liệu Database</div>
-                <div className="text-xs text-red-600/80 font-normal">Reset toàn bộ dữ liệu tiệm, chỉ giữ lại tài khoản Admin</div>
-              </div>
-            </div>
-            <ChevronRight className="w-5 h-5 text-red-400" />
-          </button>
         </div>
 
         {/* Logout Button */}

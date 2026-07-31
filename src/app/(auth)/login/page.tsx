@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Lock, User, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { setAuthSession } from "@/lib/auth";
 import { addAuditLog } from "@/lib/audit-log";
+import { verifyEmployeeLogin } from "@/lib/employee-store";
 import { verifyEmployeeCredentialsAction } from "@/server/actions/employees";
 import { logAuditAction } from "@/server/actions/audit";
 
@@ -30,69 +31,87 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    try {
-      // 1. Admin verification (Seed Accounts)
-      const isAdminSeed1 = cleanUsername === "dinhcongnhat" && cleanPassword === "10122002";
-      const isAdminSeed2 = cleanUsername === "admin" && cleanPassword === "admin123";
+    // 1. Admin verification (Seed Accounts: admin/admin123 and dinhcongnhat/10122002)
+    const isAdminSeed1 = cleanUsername === "dinhcongnhat" && cleanPassword === "10122002";
+    const isAdminSeed2 = cleanUsername === "admin" && cleanPassword === "admin123";
 
-      if (isAdminSeed1 || isAdminSeed2) {
-        const adminName = cleanUsername === "admin" ? "Quản trị viên (Admin)" : "Định Công Nhật (Admin)";
-        setAuthSession({
-          username: cleanUsername,
-          fullName: adminName,
-          role: "admin",
-          token: "admin_token_" + Date.now(),
-        });
-        addAuditLog({
-          action: "USER_LOGIN",
-          actorName: adminName,
-          actorRole: "admin",
-          details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
-        });
-        await logAuditAction({
-          action: "USER_LOGIN",
-          actorName: adminName,
-          actorRole: "admin",
-          details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
-        });
-        setLoading(false);
-        router.push("/admin");
-        return;
-      }
+    if (isAdminSeed1 || isAdminSeed2) {
+      const adminName = cleanUsername === "admin" ? "Quản trị viên (Admin)" : "Định Công Nhật (Admin)";
+      
+      // Instantly set session and cookies
+      setAuthSession({
+        username: cleanUsername,
+        fullName: adminName,
+        role: "admin",
+        token: "admin_token_" + Date.now(),
+      });
 
-      // 2. Dynamic Employee verification from Supabase Database
-      const empAccount = await verifyEmployeeCredentialsAction(cleanUsername, cleanPassword);
-      if (empAccount) {
-        setAuthSession({
-          username: cleanUsername,
-          fullName: empAccount.full_name,
-          role: "employee",
-          token: "employee_token_" + Date.now(),
-        });
-        addAuditLog({
-          action: "USER_LOGIN",
-          actorName: empAccount.full_name,
-          actorRole: "employee",
-          details: `Đã đăng nhập thành công vào giao diện nhân viên`,
-        });
-        await logAuditAction({
-          action: "USER_LOGIN",
-          actorName: empAccount.full_name,
-          actorRole: "employee",
-          details: `Đã đăng nhập thành công vào giao diện nhân viên`,
-        });
-        setLoading(false);
-        router.push("/employee");
-        return;
-      }
+      addAuditLog({
+        action: "USER_LOGIN",
+        actorName: adminName,
+        actorRole: "admin",
+        details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
+      });
 
-      setError("Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại!");
-    } catch (err) {
-      console.error("Login error:", err);
-      setError("Đã xảy ra lỗi khi kết nối hệ thống. Vui lòng thử lại!");
-    } finally {
+      // Fire server log asynchronously without blocking login or throwing errors
+      logAuditAction({
+        action: "USER_LOGIN",
+        actorName: adminName,
+        actorRole: "admin",
+        details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
+      }).catch(() => {});
+
       setLoading(false);
+      router.push("/admin");
+      return;
     }
+
+    // 2. Employee verification (Try Database first, then fallback to local store)
+    let empName = "";
+    try {
+      const empDb = await verifyEmployeeCredentialsAction(cleanUsername, cleanPassword).catch(() => null);
+      if (empDb) {
+        empName = empDb.full_name;
+      }
+    } catch (e) {}
+
+    // Fallback check against local employee store if DB failed or returned null
+    if (!empName) {
+      const empLocal = verifyEmployeeLogin(cleanUsername, cleanPassword);
+      if (empLocal) {
+        empName = empLocal.fullName;
+      }
+    }
+
+    if (empName) {
+      setAuthSession({
+        username: cleanUsername,
+        fullName: empName,
+        role: "employee",
+        token: "employee_token_" + Date.now(),
+      });
+
+      addAuditLog({
+        action: "USER_LOGIN",
+        actorName: empName,
+        actorRole: "employee",
+        details: `Đã đăng nhập thành công vào giao diện nhân viên`,
+      });
+
+      logAuditAction({
+        action: "USER_LOGIN",
+        actorName: empName,
+        actorRole: "employee",
+        details: `Đã đăng nhập thành công vào giao diện nhân viên`,
+      }).catch(() => {});
+
+      setLoading(false);
+      router.push("/employee");
+      return;
+    }
+
+    setLoading(false);
+    setError("Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại!");
   };
 
   return (
