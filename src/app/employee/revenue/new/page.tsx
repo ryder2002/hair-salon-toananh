@@ -10,6 +10,8 @@ import { saveOfflineRevenue } from "@/lib/offline/idb";
 import { addAuditLog } from "@/lib/audit-log";
 import { getAuthSession } from "@/lib/auth";
 
+import { addRevenueTransaction } from "@/lib/revenue-store";
+
 export default function RecordRevenuePage() {
   const router = useRouter();
   const [rawAmount, setRawAmount] = useState("");
@@ -18,6 +20,7 @@ export default function RecordRevenuePage() {
   const [note, setNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const numericAmount = parseVNDInput(rawAmount);
 
@@ -29,52 +32,31 @@ export default function RecordRevenuePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (numericAmount <= 0n) return;
+    setErrorMsg("");
 
-    setLoading(true);
-    const idempotency_key = crypto.randomUUID();
-    const business_date = getVietnamBusinessDate();
-    const performed_at = new Date().toISOString();
     const currentSession = getAuthSession();
     const actorName = currentSession?.fullName || "Nhân viên";
 
-    const payload = {
-      idempotency_key,
+    // Call persistent revenue store with Anti-Spam check & real-time notification
+    const res = addRevenueTransaction({
+      staffName: actorName,
+      username: currentSession?.username,
+      serviceName: serviceName || "Dịch vụ tóc",
       amount: Number(numericAmount),
-      payment_method: paymentMethod,
-      service_name: serviceName || "Dịch vụ tóc",
-      note,
-      business_date,
-      performed_at,
-      created_at: performed_at,
-      sync_status: "pending" as const,
-    };
-
-    addAuditLog({
-      action: "REVENUE_RECORDED",
-      actorName,
-      actorRole: "employee",
-      details: `Đã ghi doanh thu ${formatVND(numericAmount)} (${paymentMethod === "cash" ? "Tiền mặt" : "Chuyển khoản"}) cho dịch vụ "${serviceName || "Dịch vụ tóc"}"`,
+      paymentMethod,
     });
 
-    try {
-      if (!navigator.onLine) {
-        // Save offline
-        await saveOfflineRevenue(payload);
-        setSuccess(true);
-        setTimeout(() => router.push("/employee"), 1200);
-      } else {
-        // Online submit simulation
-        await new Promise((resolve) => setTimeout(resolve, 400));
-        setSuccess(true);
-        setTimeout(() => router.push("/employee"), 1000);
-      }
-    } catch {
-      await saveOfflineRevenue(payload);
-      setSuccess(true);
-      setTimeout(() => router.push("/employee"), 1200);
-    } finally {
-      setLoading(false);
+    if (!res.success) {
+      setErrorMsg(res.error || "Thao tác quá nhanh!");
+      return;
     }
+
+    setLoading(true);
+    setTimeout(() => {
+      setLoading(false);
+      setSuccess(true);
+      setTimeout(() => router.push("/employee"), 1000);
+    }, 400);
   };
 
   return (
@@ -106,6 +88,11 @@ export default function RecordRevenuePage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-5">
+            {errorMsg && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-[10px] text-xs font-semibold text-center animate-bounce">
+                ⚠️ {errorMsg}
+              </div>
+            )}
             {/* 1. Big Amount Input */}
             <div className="bg-white border border-[rgba(23,23,23,0.14)] rounded-[14px] p-4 shadow-sm text-center">
               <label className="block text-xs font-semibold text-[rgba(23,23,23,0.6)] uppercase tracking-wider mb-2">

@@ -33,11 +33,11 @@ export default function AdminDashboardPage() {
 
         {/* 4 KPI Cards Row */}
         <KpiCardsRow
-          totalRevenue={12560000n}
-          cashTotal={4350000n}
-          bankTotal={8210000n}
-          transactionCount={48}
-          revenueGrowthPercent={18.6}
+          totalRevenue={0n}
+          cashTotal={0n}
+          bankTotal={0n}
+          transactionCount={0}
+          revenueGrowthPercent={0}
         />
 
         {/* Section: Doanh thu theo nhân viên */}

@@ -22,40 +22,19 @@ interface RecentTransactionsListProps {
 }
 
 export function RecentTransactionsList({
-  transactions = [
-    {
-      id: "t1",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Cắt tóc + Gội đầu",
-      amount: 250000n,
-      paymentMethod: "cash",
-      time: "09:35",
-      status: "recorded",
-    },
-    {
-      id: "t2",
-      staffName: "Hoàng Long",
-      avatarType: "scissors",
-      serviceName: "Cạo mặt",
-      amount: 120000n,
-      paymentMethod: "bank_transfer",
-      time: "09:12",
-      status: "recorded",
-    },
-    {
-      id: "t3",
-      staffName: "Đức Anh",
-      avatarType: "mustache",
-      serviceName: "Cắt tóc",
-      amount: 180000n,
-      paymentMethod: "cash",
-      time: "08:47",
-      status: "recorded",
-    },
-  ],
+  transactions = [],
   showStatusBadge = false,
 }: RecentTransactionsListProps) {
+  if (transactions.length === 0) {
+    return (
+      <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-6 text-center shadow-sm">
+        <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+          Chưa có giao dịch nào được ghi nhận
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2.5">
       {transactions.map((t) => {

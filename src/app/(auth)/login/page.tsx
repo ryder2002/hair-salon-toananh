@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Lock, User, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { setAuthSession } from "@/lib/auth";
 import { addAuditLog } from "@/lib/audit-log";
+import { verifyEmployeeLogin } from "@/lib/employee-store";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState("dinhcongnhat");
-  const [password, setPassword] = useState("10122002");
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -31,7 +32,7 @@ export default function LoginPage() {
     setTimeout(() => {
       setLoading(false);
 
-      // Admin verification
+      // 1. Admin verification (Seed Account)
       if (cleanUsername === "dinhcongnhat" && cleanPassword === "10122002") {
         setAuthSession({
           username: "dinhcongnhat",
@@ -49,19 +50,18 @@ export default function LoginPage() {
         return;
       }
 
-      // Employee verification
-      const employeeUsernames = ["minhquan", "hoanglong", "ducanh", "baonam", "quan", "long"];
-      if (employeeUsernames.includes(cleanUsername) && (cleanPassword === "10122002" || cleanPassword === "123456")) {
-        const empName = cleanUsername.charAt(0).toUpperCase() + cleanUsername.slice(1);
+      // 2. Dynamic Employee verification from store
+      const empAccount = verifyEmployeeLogin(cleanUsername, cleanPassword);
+      if (empAccount) {
         setAuthSession({
-          username: cleanUsername,
-          fullName: empName,
+          username: empAccount.username,
+          fullName: empAccount.fullName,
           role: "employee",
           token: "employee_token_" + Date.now(),
         });
         addAuditLog({
           action: "USER_LOGIN",
-          actorName: empName,
+          actorName: empAccount.fullName,
           actorRole: "employee",
           details: `Đã đăng nhập thành công vào giao diện nhân viên`,
         });
@@ -131,10 +131,11 @@ export default function LoginPage() {
               />
               <button
                 type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3.5 top-3.5 text-[rgba(23,23,23,0.4)] hover:text-[#171717]"
+                onClick={() => setShowPassword((prev) => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-2 z-10 text-[rgba(23,23,23,0.5)] hover:text-[#741F2C] focus:outline-none transition-colors"
+                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
               >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                {showPassword ? <EyeOff className="w-4 h-4 text-[#741F2C]" /> : <Eye className="w-4 h-4 text-[rgba(23,23,23,0.5)]" />}
               </button>
             </div>
           </div>

@@ -24,6 +24,7 @@ import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, calculateCommission, calculateTotalSalary } from "@/lib/money";
 import { getMonthPayroll, saveMonthPayroll, StoredPayrollRow, MonthPayrollData } from "@/lib/payroll-store";
 import { addAuditLog } from "@/lib/audit-log";
+import { addNotification } from "@/lib/notification-store";
 
 import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
@@ -146,6 +147,25 @@ export default function PayrollPage() {
         : newStatus === "published"
         ? "Công bố bảng lương cho nhân viên"
         : "Đánh dấu đã thanh toán toàn bộ";
+
+    if (newStatus === "published") {
+      addNotification({
+        title: "Công bố bảng lương mới",
+        message: `Bảng lương ${selectedMonth} đã được công bố! Tất cả nhân viên có thể vào tab Bảng lương để kiểm tra.`,
+        type: "payroll",
+        url: "/employee/payroll",
+      });
+
+      if (typeof window !== "undefined" && "serviceWorker" in navigator && Notification.permission === "granted") {
+        navigator.serviceWorker.ready.then((reg) => {
+          reg.showNotification(`Toàn Anh Hair Salon - ${selectedMonth}`, {
+            body: `Bảng lương ${selectedMonth} đã chính thức được công bố! Hãy vào ứng dụng để xem chi tiết.`,
+            icon: "/Logo.png",
+            badge: "/Logo.png",
+          });
+        });
+      }
+    }
 
     addAuditLog({
       action: newStatus === "paid" ? "PAYROLL_PAID" : newStatus === "published" ? "PAYROLL_PUBLISHED" : "PAYROLL_LOCKED",

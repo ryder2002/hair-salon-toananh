@@ -29,58 +29,7 @@ export default function RevenueManagementPage() {
     return () => unsubscribe();
   }, []);
 
-  const [transactions, setTransactions] = useState<TransactionItem[]>([
-    {
-      id: "r1",
-      staffName: "Hoàng Long",
-      avatarType: "scissors",
-      serviceName: "Cạo mặt + Gội đầu",
-      amount: 120000n,
-      paymentMethod: "cash",
-      time: "09:35",
-      status: "recorded",
-    },
-    {
-      id: "r2",
-      staffName: "Minh Quân",
-      avatarType: "mustache",
-      serviceName: "Cắt tóc + Gội đầu",
-      amount: 250000n,
-      paymentMethod: "cash",
-      time: "09:12",
-      status: "recorded",
-    },
-    {
-      id: "r3",
-      staffName: "Đức Anh",
-      avatarType: "comb",
-      serviceName: "Cắt tóc",
-      amount: 180000n,
-      paymentMethod: "bank_transfer",
-      time: "08:47",
-      status: "recorded",
-    },
-    {
-      id: "r4",
-      staffName: "Bảo Nam",
-      avatarType: "scissors",
-      serviceName: "Uốn tóc",
-      amount: 350000n,
-      paymentMethod: "bank_transfer",
-      time: "08:20",
-      status: "recorded",
-    },
-    {
-      id: "r5",
-      staffName: "Hoàng Long",
-      avatarType: "mustache",
-      serviceName: "Nhuộm tóc",
-      amount: 300000n,
-      paymentMethod: "cash",
-      time: "07:55",
-      status: "voided",
-    },
-  ]);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);

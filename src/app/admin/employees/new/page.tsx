@@ -6,11 +6,14 @@ import { ArrowLeft, User, Mail, Phone, Briefcase, Lock, DollarSign, Percent, Che
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 
+import { addEmployee } from "@/lib/employee-store";
+import { addAuditLog } from "@/lib/audit-log";
+
 export default function AddEmployeePage() {
   const router = useRouter();
 
   const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("Thợ cắt tóc");
   const [password, setPassword] = useState("123456");
@@ -25,13 +28,33 @@ export default function AddEmployeePage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!username.trim() || !fullName.trim()) return;
+
     setLoading(true);
+
+    const createdEmp = addEmployee({
+      username: username.trim().toLowerCase(),
+      password: password.trim(),
+      fullName: fullName.trim(),
+      phone: phone.trim(),
+      jobTitle,
+      baseSalary: Number(baseSalaryNum),
+      allowance: Number(allowanceNum),
+      commissionRate: parseFloat(commissionRate) || 8.0,
+    });
+
+    addAuditLog({
+      action: "STAFF_CREATED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã tạo tài khoản nhân viên mới: ${createdEmp.fullName} (@${createdEmp.username})`,
+    });
 
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);
       setTimeout(() => router.push("/admin/employees"), 1000);
-    }, 600);
+    }, 400);
   };
 
   return (
@@ -88,15 +111,15 @@ export default function AddEmployeePage() {
 
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-[rgba(23,23,23,0.7)]">
-                  Email đăng nhập *
+                  Tên đăng nhập (Username) *
                 </label>
                 <div className="relative">
-                  <Mail className="w-4 h-4 text-[rgba(23,23,23,0.4)] absolute left-3 top-3" />
+                  <User className="w-4 h-4 text-[rgba(23,23,23,0.4)] absolute left-3 top-3" />
                   <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="hung@barbershop.com"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="hungnv (viết liền không dấu)"
                     required
                     className="w-full bg-[#F7F3EC]/50 border border-[rgba(23,23,23,0.14)] rounded-[10px] pl-9 pr-3 py-2.5 text-sm text-[#171717] focus:outline-none focus:border-[#741F2C]"
                   />

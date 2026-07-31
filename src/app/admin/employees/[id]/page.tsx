@@ -1,26 +1,46 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Lock, Unlock, Save, CheckCircle2, DollarSign, Percent, Trash2, AlertTriangle, X } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 import { addAuditLog } from "@/lib/audit-log";
+import { getEmployees, deleteEmployee, toggleEmployeeStatus } from "@/lib/employee-store";
 
 export default function EmployeeDetailPage() {
   const router = useRouter();
   const params = useParams();
   const id = params?.id as string;
 
-  const [fullName, setFullName] = useState(id === "e1" ? "Minh Quân" : "Hoàng Long");
-  const [jobTitle, setJobTitle] = useState(id === "e1" ? "Quản lý" : "Thợ cắt tóc");
+  const [fullName, setFullName] = useState("");
+  const [username, setUsername] = useState("");
+  const [jobTitle, setJobTitle] = useState("Thợ cắt tóc");
   const [status, setStatus] = useState<"active" | "inactive">("active");
-  const [rawBaseSalary, setRawBaseSalary] = useState("8000000");
-  const [rawAllowance, setRawAllowance] = useState("1000000");
-  const [commissionRate, setCommissionRate] = useState("10.0");
+  const [rawBaseSalary, setRawBaseSalary] = useState("6000000");
+  const [rawAllowance, setRawAllowance] = useState("500000");
+  const [commissionRate, setCommissionRate] = useState("8.0");
   const [saved, setSaved] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleting, setDeleting] = useState(false);
+
+  useEffect(() => {
+    if (!id) return;
+    const employees = getEmployees();
+    const found = employees.find((e) => e.id === id || e.username === id);
+    if (found) {
+      setFullName(found.fullName);
+      setUsername(found.username);
+      setJobTitle(found.jobTitle);
+      setStatus(found.status);
+      setRawBaseSalary(String(found.baseSalary || 6000000));
+      setRawAllowance(String(found.allowance || 500000));
+      setCommissionRate(String(found.commissionRate || 8.0));
+    } else {
+      setFullName(id);
+      setUsername(id);
+    }
+  }, [id]);
 
   const baseSalaryNum = parseVNDInput(rawBaseSalary);
   const allowanceNum = parseVNDInput(rawAllowance);
@@ -32,35 +52,40 @@ export default function EmployeeDetailPage() {
       action: "STAFF_UPDATED",
       actorName: "Admin Manager",
       actorRole: "admin",
-      details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
+      details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (@${username}) (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
     });
     setTimeout(() => setSaved(false), 2000);
   };
 
   const toggleStatus = () => {
-    const newStatus = status === "active" ? "inactive" : "active";
+    const newStatus = toggleEmployeeStatus(id);
     setStatus(newStatus);
     addAuditLog({
       action: newStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
       actorName: "Admin Manager",
       actorRole: "admin",
-      details: `Đã ${newStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName}`,
+      details: `Đã ${newStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName} (@${username})`,
     });
   };
 
   const handleDeleteEmployee = () => {
     setDeleting(true);
+
+    // Call persistent delete from employee-store
+    deleteEmployee(id);
+
     addAuditLog({
       action: "STAFF_DELETED",
       actorName: "Admin Manager",
       actorRole: "admin",
-      details: `Đã xóa tài khoản người dùng/nhân viên ${fullName} (Chức vụ: ${jobTitle}) khỏi hệ thống`,
+      details: `Đã xóa vĩnh viễn tài khoản người dùng/nhân viên ${fullName} (@${username}) khỏi hệ thống`,
     });
+
     setTimeout(() => {
       setDeleting(false);
       setShowDeleteModal(false);
       router.push("/admin/employees");
-    }, 600);
+    }, 400);
   };
 
   return (

@@ -6,8 +6,12 @@ import { User, Lock, LogOut, CheckCircle2, ShieldCheck } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 
+import { getAuthSession, clearAuthSession } from "@/lib/auth";
+import { addAuditLog } from "@/lib/audit-log";
+
 export default function EmployeeProfilePage() {
   const router = useRouter();
+  const [session, setSession] = useState<any>(() => getAuthSession());
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -15,10 +19,22 @@ export default function EmployeeProfilePage() {
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
+    if (newPassword.length < 6) {
+      setMsg("Mật khẩu mới phải từ 6 ký tự trở lên!");
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setMsg("Mật khẩu mới không trùng khớp!");
       return;
     }
+
+    addAuditLog({
+      action: "PASSWORD_CHANGED",
+      actorName: session?.fullName || "Nhân viên",
+      actorRole: "employee",
+      details: `Đã đổi mật khẩu tài khoản nhân viên @${session?.username} thành công`,
+    });
+
     setMsg("Đổi mật khẩu thành công!");
     setOldPassword("");
     setNewPassword("");
@@ -27,8 +43,12 @@ export default function EmployeeProfilePage() {
   };
 
   const handleLogout = () => {
+    clearAuthSession();
     router.push("/login");
   };
+
+  const empName = session?.fullName || "Nhân viên";
+  const empRole = session?.role === "admin" ? "Quản lý tiệm" : "Thợ cắt tóc";
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-28 max-w-md mx-auto relative shadow-xl">
@@ -45,12 +65,12 @@ export default function EmployeeProfilePage() {
         {/* Profile Info Card */}
         <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm flex items-center space-x-3.5">
           <div className="w-14 h-14 rounded-full bg-red-50 border border-red-200 text-[#741F2C] flex items-center justify-center font-bold text-xl">
-            M
+            {empName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <h2 className="text-lg font-bold text-[#171717]">Minh Quân</h2>
-            <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Quản lý tiệm · Thợ cắt chính</p>
-            <p className="text-xs text-[rgba(23,23,23,0.5)]">quan@barbershop.com · 0912345678</p>
+            <h2 className="text-lg font-bold text-[#171717]">{empName}</h2>
+            <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">{empRole}</p>
+            <p className="text-xs text-[rgba(23,23,23,0.5)]">Tài khoản: @{session?.username || "nhanvien"}</p>
           </div>
         </div>
 

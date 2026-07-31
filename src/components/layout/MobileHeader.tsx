@@ -1,8 +1,9 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { getNotifications, subscribeNotifications } from "@/lib/notification-store";
 
 interface MobileHeaderProps {
   title?: string;
@@ -12,9 +13,22 @@ interface MobileHeaderProps {
 }
 
 export function MobileHeader({
-  unreadCount = 5,
+  unreadCount: initialCount,
   showLogo = true,
 }: MobileHeaderProps) {
+  const [unreadCount, setUnreadCount] = useState(initialCount ?? 0);
+
+  useEffect(() => {
+    const notifs = getNotifications();
+    setUnreadCount(notifs.filter((n) => !n.isRead).length);
+
+    const unsubscribe = subscribeNotifications((updated) => {
+      setUnreadCount(updated.filter((n) => !n.isRead).length);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   return (
     <header className="sticky top-0 z-40 bg-[#F7F3EC] border-b border-[rgba(23,23,23,0.08)] px-4 py-2.5">
       <div className="flex items-center justify-between">
@@ -36,7 +50,7 @@ export function MobileHeader({
         >
           <Bell className="w-5 h-5 text-[#741F2C]" />
           {unreadCount > 0 && (
-            <span className="absolute top-1 right-1 w-4 h-4 bg-[#741F2C] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#F7F3EC]">
+            <span className="absolute top-1 right-1 w-4 h-4 bg-[#741F2C] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#F7F3EC] animate-pulse">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}

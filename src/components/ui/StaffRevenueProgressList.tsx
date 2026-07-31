@@ -19,13 +19,18 @@ interface StaffRevenueProgressListProps {
 }
 
 export function StaffRevenueProgressList({
-  items = [
-    { id: "1", name: "Minh Quân", avatarType: "pole", revenue: 5250000n, percentage: 42 },
-    { id: "2", name: "Hoàng Long", avatarType: "scissors", revenue: 3520000n, percentage: 28 },
-    { id: "3", name: "Đức Anh", avatarType: "mustache", revenue: 2260000n, percentage: 18 },
-    { id: "4", name: "Bảo Nam", avatarType: "comb", revenue: 1530000n, percentage: 12 },
-  ],
+  items = [],
 }: StaffRevenueProgressListProps) {
+  if (items.length === 0) {
+    return (
+      <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-6 text-center shadow-sm">
+        <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+          Chưa có dữ liệu doanh thu nhân viên hôm nay
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm space-y-4">
       {items.map((staff) => (

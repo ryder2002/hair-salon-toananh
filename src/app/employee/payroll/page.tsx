@@ -9,47 +9,49 @@ import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
 import { getMonthPayroll, StoredPayrollRow } from "@/lib/payroll-store";
 
+import { getAuthSession } from "@/lib/auth";
+import { Lock, ShieldAlert } from "lucide-react";
+
 export default function EmployeePayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
   const [showMonthPickerModal, setShowMonthPickerModal] = useState(false);
-  const [isPaid, setIsPaid] = useState(false);
-  const [totalSalary, setTotalSalary] = useState(10549000n);
+  const [session] = useState<any>(() => getAuthSession());
+  const [mySlip, setMySlip] = useState<StoredPayrollRow | null>(null);
+  const [isPublished, setIsPublished] = useState(false);
 
   useEffect(() => {
     const data = getMonthPayroll(selectedMonth);
-    const empRow = data.rows.find((r: StoredPayrollRow) => r.name.includes("Minh") || r.id === "p1") || data.rows[0];
-    if (empRow) {
-      setIsPaid(empRow.isPaid || data.globalStatus === "paid");
-      setTotalSalary(BigInt(empRow.totalSalary || "10549000"));
-    }
-  }, [selectedMonth]);
+    const publishedState = data.globalStatus === "published" || data.globalStatus === "paid";
+    setIsPublished(publishedState);
 
-  const payrollSlip = {
-    month: selectedMonth,
-    status: isPaid ? "paid" : "published",
-    employeeName: "Minh Quân",
-    jobTitle: "Quản lý tiệm",
-    baseSalary: 8000000n,
-    allowance: 1000000n,
-    eligibleRevenue: 10490000n,
-    commissionRate: 10.0,
-    commissionAmount: 1049000n,
-    bonus: 500000n,
-    deduction: 0n,
-    totalSalary: totalSalary,
-    publishedAt: "20/05/2024 08:30",
-  };
+    // Strictly match current logged-in employee session
+    const currentName = session?.fullName || "";
+    const currentUsername = session?.username || "";
+
+    const empRow = data.rows.find(
+      (r: StoredPayrollRow) =>
+        (currentName && r.name.toLowerCase().includes(currentName.toLowerCase())) ||
+        (currentUsername && r.name.toLowerCase().includes(currentUsername.toLowerCase()))
+    ) || null;
+
+    setMySlip(empRow);
+  }, [selectedMonth, session]);
+
+  const empName = session?.fullName || mySlip?.name || "Nhân viên";
+  const jobTitle = mySlip?.roleTitle || "Thợ cắt tóc";
+  const isPaid = mySlip?.isPaid || false;
+  const totalSalary = mySlip ? BigInt(mySlip.totalSalary) : 0n;
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-28 max-w-md mx-auto relative shadow-xl">
-      <MobileHeader title="Bảng lương của tôi" subtitle="The Gentlemen Barbershop" unreadCount={1} />
+      <MobileHeader title="Bảng lương của tôi" subtitle="The Gentlemen Barbershop" unreadCount={0} />
 
       <main className="px-4 pt-3 space-y-4">
         {/* Month Selector */}
         <div className="bg-white border border-[rgba(23,23,23,0.14)] rounded-[12px] p-3 flex justify-between items-center text-xs font-bold text-[#171717]">
           <div className="flex items-center space-x-2">
             <Calendar className="w-4 h-4 text-[#741F2C]" />
-            <span>Kỳ lương: <strong className="text-[#741F2C]">{payrollSlip.month}</strong></span>
+            <span>Kỳ lương: <strong className="text-[#741F2C]">{selectedMonth}</strong></span>
           </div>
           <button
             onClick={() => setShowMonthPickerModal(true)}
@@ -59,60 +61,79 @@ export default function EmployeePayrollPage() {
           </button>
         </div>
 
-        {/* Total Highlight Card */}
-        <div className="bg-[#741F2C] text-white p-5 rounded-[16px] shadow-md space-y-2 text-center">
-          <div className="text-xs text-white/80 font-medium uppercase tracking-wider">
-            TỔNG LƯƠNG THỰC NHẬN
+        {!isPublished ? (
+          /* Locked / Not Published Yet Card */
+          <div className="bg-white border border-amber-200 rounded-[16px] p-8 text-center space-y-3 shadow-sm">
+            <div className="w-14 h-14 rounded-full bg-amber-50 text-amber-700 flex items-center justify-center mx-auto border border-amber-200">
+              <Lock className="w-7 h-7" />
+            </div>
+            <h3 className="font-bold text-base text-[#171717]">Bảng lương chưa được công bố</h3>
+            <p className="text-xs text-[rgba(23,23,23,0.6)] leading-relaxed">
+              Bảng lương kỳ <strong className="text-[#741F2C]">{selectedMonth}</strong> đang được Quản lý tổng hợp. Thông tin lương của bạn sẽ tự động hiển thị sau khi Admin nhấn công bố.
+            </p>
           </div>
-          <div className="text-3xl font-extrabold tracking-tight">
-            {formatVND(payrollSlip.totalSalary)}
+        ) : !mySlip ? (
+          /* Empty / No Record for this employee */
+          <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[16px] p-8 text-center space-y-3 shadow-sm">
+            <ShieldAlert className="w-12 h-12 text-gray-400 mx-auto" />
+            <h3 className="font-bold text-base text-[#171717]">Chưa có dữ liệu lương kỳ này</h3>
+            <p className="text-xs text-[rgba(23,23,23,0.6)]">
+              Tài khoản <strong className="text-[#741F2C]">{empName}</strong> chưa có dữ liệu chấm công/doanh thu trong kỳ lương này.
+            </p>
           </div>
-          <div className="text-[11px] text-white/70">
-            Công bố lúc: {payrollSlip.publishedAt}
-          </div>
-        </div>
+        ) : (
+          <>
+            {/* Total Highlight Card */}
+            <div className="bg-[#741F2C] text-white p-5 rounded-[16px] shadow-md space-y-2 text-center">
+              <div className="flex items-center justify-between text-xs text-white/80 font-medium">
+                <span>HỌ VÀ TÊN: {empName}</span>
+                {isPaid ? (
+                  <span className="px-2 py-0.5 rounded bg-blue-500 text-white text-[10px] font-bold">✓ ĐÃ THANH TOÁN</span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded bg-emerald-500 text-white text-[10px] font-bold">✓ ĐÃ CÔNG BỐ</span>
+                )}
+              </div>
+              <div className="text-xs text-white/80 font-medium uppercase tracking-wider pt-1">
+                TỔNG LƯƠNG THỰC NHẬN
+              </div>
+              <div className="text-3xl font-extrabold tracking-tight">
+                {formatVND(totalSalary)}
+              </div>
+            </div>
 
-        {/* Detailed Breakdown Card */}
-        <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm space-y-3 text-xs">
-          <h3 className="font-bold text-[#741F2C] text-xs uppercase tracking-wider border-b border-[rgba(23,23,23,0.1)] pb-2">
-            CHI TIẾT THU NHẬP
-          </h3>
+            {/* Detailed Breakdown Card */}
+            <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm space-y-3 text-xs">
+              <h3 className="font-bold text-[#741F2C] text-xs uppercase tracking-wider border-b border-[rgba(23,23,23,0.1)] pb-2">
+                CHI TIẾT THU NHẬP CÁ NHÂN
+              </h3>
 
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Lương cứng cố định:</span>
-            <strong className="font-bold text-[#171717]">{formatVND(payrollSlip.baseSalary)}</strong>
-          </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[rgba(23,23,23,0.7)] font-medium">Lương cứng cố định:</span>
+                <strong className="font-bold text-[#171717]">{formatVND(BigInt(mySlip.baseSalary || 0))}</strong>
+              </div>
 
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Phụ cấp công việc:</span>
-            <strong className="font-bold text-[#171717]">{formatVND(payrollSlip.allowance)}</strong>
-          </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[rgba(23,23,23,0.7)] font-medium">Phụ cấp công việc:</span>
+                <strong className="font-bold text-[#171717]">{formatVND(BigInt(mySlip.allowance || 0))}</strong>
+              </div>
 
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Doanh thu cá nhân trong tháng:</span>
-            <strong className="font-bold text-[#171717]">{formatVND(payrollSlip.eligibleRevenue)}</strong>
-          </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[rgba(23,23,23,0.7)] font-medium">Doanh thu cá nhân trong tháng:</span>
+                <strong className="font-bold text-[#171717]">{formatVND(BigInt(mySlip.eligibleRevenue || 0))}</strong>
+              </div>
 
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Hoa hồng ({payrollSlip.commissionRate}%):</span>
-            <strong className="font-bold text-[#741F2C]">{formatVND(payrollSlip.commissionAmount)}</strong>
-          </div>
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[rgba(23,23,23,0.7)] font-medium">Hoa hồng ({mySlip.commPercent || 10}%):</span>
+                <strong className="font-bold text-[#741F2C]">{formatVND(BigInt(mySlip.commAmount || 0))}</strong>
+              </div>
 
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Tiền thưởng khác (+):</span>
-            <strong className="font-bold text-emerald-700">{formatVND(payrollSlip.bonus)}</strong>
-          </div>
-
-          <div className="flex justify-between items-center py-1">
-            <span className="text-[rgba(23,23,23,0.7)] font-medium">Khấu trừ (-):</span>
-            <strong className="font-bold text-red-600">{formatVND(payrollSlip.deduction)}</strong>
-          </div>
-
-          <div className="border-t border-[rgba(23,23,23,0.12)] pt-2.5 flex justify-between items-center text-sm font-extrabold text-[#741F2C]">
-            <span>TỔNG CỘNG:</span>
-            <span>{formatVND(payrollSlip.totalSalary)}</span>
-          </div>
-        </div>
+              <div className="border-t border-[rgba(23,23,23,0.12)] pt-2.5 flex justify-between items-center text-sm font-extrabold text-[#741F2C]">
+                <span>TỔNG CỘNG LƯƠNG:</span>
+                <span>{formatVND(BigInt(mySlip.totalSalary || 0))}</span>
+              </div>
+            </div>
+          </>
+        )}
       </main>
 
       {/* Month Picker Calendar Modal */}
