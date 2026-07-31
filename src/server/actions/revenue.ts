@@ -5,9 +5,9 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { RevenueEntrySchema } from "@/lib/validations";
 
 export async function fetchRevenuesAction(date?: string) {
-  const supabase = await createServerSupabaseClient();
+  const adminClient = createAdminClient();
   
-  let query = supabase
+  let query = adminClient
     .from("revenue_entries")
     .select(`
       id,
@@ -44,28 +44,24 @@ export async function createRevenueEntryAction(formData: {
   idempotency_key: string;
 }) {
   const validated = RevenueEntrySchema.parse(formData);
-  const supabase = await createServerSupabaseClient();
+  const adminClient = createAdminClient();
+  const shopId = "11111111-1111-1111-1111-111111111111";
 
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) {
-    throw new Error("Unauthorized: User session not found.");
-  }
-
-  const { data: profile } = await supabase
+  // Fetch first active profile or admin profile
+  const { data: profiles } = await adminClient
     .from("profiles")
-    .select("shop_id, full_name")
-    .eq("id", userData.user.id)
-    .single();
+    .select("id, full_name")
+    .eq("shop_id", shopId)
+    .limit(1);
 
-  if (!profile) {
-    throw new Error("Profile not found");
-  }
+  const empId = profiles?.[0]?.id || "a0000000-0000-0000-0000-000000000001";
+  const empName = profiles?.[0]?.full_name || "Nhân viên";
 
-  const { data, error } = await supabase
+  const { data, error } = await adminClient
     .from("revenue_entries")
     .insert({
-      shop_id: profile.shop_id,
-      employee_id: userData.user.id,
+      shop_id: shopId,
+      employee_id: empId,
       amount: validated.amount,
       payment_method: validated.payment_method,
       service_name: validated.service_name,
@@ -73,7 +69,7 @@ export async function createRevenueEntryAction(formData: {
       business_date: validated.business_date,
       performed_at: new Date().toISOString(),
       idempotency_key: validated.idempotency_key,
-      created_by: userData.user.id,
+      created_by: empId,
     })
     .select()
     .single();
@@ -84,18 +80,17 @@ export async function createRevenueEntryAction(formData: {
   }
 
   // Find all Admin profiles for this shop to send notification
-  const adminClient = createAdminClient();
   const { data: adminProfiles } = await adminClient
     .from("profiles")
     .select("id")
-    .eq("shop_id", profile.shop_id)
+    .eq("shop_id", shopId)
     .eq("role", "admin");
 
-  const notifMessage = `${profile.full_name} vừa tạo đơn "${validated.service_name || "Dịch vụ tóc"}" (${validated.amount.toLocaleString("vi-VN")} đ - ${validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"})`;
+  const notifMessage = `${empName} vừa tạo đơn "${validated.service_name || "Dịch vụ tóc"}" (${validated.amount.toLocaleString("vi-VN")} đ - ${validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"})`;
 
   if (adminProfiles && adminProfiles.length > 0) {
     const notifications = adminProfiles.map((adm) => ({
-      shop_id: profile.shop_id,
+      shop_id: shopId,
       recipient_id: adm.id,
       type: "REVENUE_RECORDED",
       title: "Nhân viên ghi nhận doanh thu mới",

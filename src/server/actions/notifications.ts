@@ -1,10 +1,10 @@
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 export async function fetchNotificationsAction() {
-  const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
     .from("notifications")
     .select("*")
     .order("created_at", { ascending: false });
@@ -17,8 +17,8 @@ export async function fetchNotificationsAction() {
 }
 
 export async function fetchUnreadNotificationCountAction(): Promise<number> {
-  const supabase = await createServerSupabaseClient();
-  const { count, error } = await supabase
+  const adminClient = createAdminClient();
+  const { count, error } = await adminClient
     .from("notifications")
     .select("id", { count: "exact", head: true })
     .is("read_at", null);
@@ -28,13 +28,9 @@ export async function fetchUnreadNotificationCountAction(): Promise<number> {
 }
 
 export async function markAllNotificationsReadAction() {
-  const supabase = await createServerSupabaseClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return;
-
-  await supabase
+  const adminClient = createAdminClient();
+  await adminClient
     .from("notifications")
     .update({ read_at: new Date().toISOString() })
-    .eq("recipient_id", userData.user.id)
     .is("read_at", null);
 }

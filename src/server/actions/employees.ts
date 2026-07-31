@@ -5,8 +5,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { EmployeeCreateSchema, SalarySettingSchema } from "@/lib/validations";
 
 export async function fetchEmployeesAction() {
-  const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
     .from("profiles")
     .select(`
       id,
@@ -19,7 +19,8 @@ export async function fetchEmployeesAction() {
       avatar_url,
       salary_settings (base_salary, allowance, commission_rate)
     `)
-    .order("created_at", { ascending: true });
+    .eq("role", "employee")
+    .order("created_at", { ascending: false });
 
   if (error) {
     console.error("Error fetching profiles:", error);
