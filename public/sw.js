@@ -1,8 +1,7 @@
 // Service Worker for Barbershop Manager PWA
 
-const CACHE_NAME = "barbershop-pwa-cache-v1";
+const CACHE_NAME = "barbershop-pwa-cache-v3";
 const STATIC_ASSETS = [
-  "/",
   "/manifest.json",
   "/Logo.png",
   "/icons/icon-192x192.png",
@@ -40,33 +39,26 @@ self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
 
   const url = new URL(event.request.url);
-  // Do not intercept API, Server Actions, or Next.js internal data requests
-  if (url.pathname.startsWith("/api") || url.pathname.startsWith("/_next/data")) {
+  // Never cache authenticated pages, RSC payloads, API calls, or server actions.
+  if (url.pathname.startsWith("/api") || url.pathname.startsWith("/_next") || url.pathname.startsWith("/admin") || url.pathname.startsWith("/employee") || event.request.headers.get("RSC")) {
+    return;
+  }
+
+  const isStaticAsset = /\.(?:png|jpg|jpeg|svg|ico|webp|woff2?|css|js)$/.test(url.pathname);
+  if (!isStaticAsset) {
+    event.respondWith(fetch(event.request).catch(() => new Response("Offline", { status: 503 })));
     return;
   }
 
   event.respondWith(
-    fetch(event.request)
-      .then(function (response) {
+    caches.match(event.request).then(function (cachedResponse) {
+      return cachedResponse || fetch(event.request).then(function (response) {
         if (response && response.status === 200 && response.type === "basic") {
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(event.request, responseToCache);
-          });
+          caches.open(CACHE_NAME).then(function (cache) { cache.put(event.request, response.clone()); });
         }
         return response;
-      })
-      .catch(function () {
-        return caches.match(event.request).then(function (cachedResponse) {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          if (event.request.mode === "navigate") {
-            return caches.match("/") || new Response("Offline", { status: 503, headers: { "Content-Type": "text/html" } });
-          }
-          return new Response("", { status: 504, statusText: "Gateway Timeout" });
-        });
-      })
+      });
+    })
   );
 });
 

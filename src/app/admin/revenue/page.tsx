@@ -8,12 +8,10 @@ import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND, parseVNDInput } from "@/lib/money";
-import { addAuditLog } from "@/lib/audit-log";
 import { fetchRevenuesAction, voidRevenueEntryAction, updateRevenueEntryAction } from "@/server/actions/revenue";
 import { fetchEmployeesAction } from "@/server/actions/employees";
 import { closeDayAction, reopenDayAction, getCurrentBusinessDateAction, isDayClosedAction } from "@/server/actions/day-closing";
 import { logAuditAction } from "@/server/actions/audit";
-import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
 import { subscribeRealtime } from "@/lib/realtime";
@@ -34,8 +32,10 @@ export default function RevenueManagementPage() {
   const [employeesList, setEmployeesList] = useState<any[]>([]);
   const [currentBusinessDate, setCurrentBusinessDate] = useState("");
   const [loading, setLoading] = useState(false);
+  const [dataReady, setDataReady] = useState(false);
 
   const loadData = async () => {
+    setDataReady(false);
     try {
       const date = await getCurrentBusinessDateAction();
       setCurrentBusinessDate(date);
@@ -51,17 +51,18 @@ export default function RevenueManagementPage() {
 
       if (dbData) setAllDbEntries(dbData);
       if (emps) setEmployeesList(emps);
+      setDataReady(true);
     } catch (err) {
       console.warn("DB revenue fetch error:", err);
+      setDataReady(false);
     }
   };
 
   useEffect(() => {
     loadData();
-    const unsub = subscribeRealtime(() => {
-      loadData();
-    });
-    return () => unsub();
+    const unsub = subscribeRealtime(() => { loadData(); });
+    const interval = window.setInterval(() => loadData(), 30000);
+    return () => { unsub(); window.clearInterval(interval); };
   }, []);
 
   const triggerToast = (msg: string) => {
@@ -150,13 +151,7 @@ export default function RevenueManagementPage() {
   const handleConfirmCloseDay = async () => {
     const targetDate = todayStr;
 
-    const res = await closeDayAction({
-      businessDate: targetDate,
-      cashTotal: Number(cashTotal),
-      bankTotal: Number(bankTotal),
-      revenueTotal: Number(totalRevenue),
-      transactionCount: recordedTxs.length,
-    });
+    const res = await closeDayAction({ businessDate: targetDate });
 
     if (res.success) {
       setShowCloseModal(false);
@@ -296,8 +291,13 @@ export default function RevenueManagementPage() {
           <button
             onClick={() => {
               if (isClosed) {
-                setDayClosingState(false);
-                addAuditLog({
+                const reason = window.prompt("Nhập lý do mở lại ngày")?.trim();
+                if (!reason) return;
+                void reopenDayAction(todayStr, reason).then((result) => {
+                  if (result.success) { setIsClosed(false); triggerToast("Đã mở lại ngày làm việc!"); }
+                  else triggerToast(result.error || "Không thể mở lại ngày");
+                });
+                void logAuditAction({
                   action: "DAY_REOPENED",
                   actorName: "Admin Manager",
                   actorRole: "admin",
@@ -367,7 +367,7 @@ export default function RevenueManagementPage() {
               {selectedTx.status === "recorded" && (
                 <button
                   type="button"
-                  disabled={loading}
+            disabled={loading || !dataReady}
                   onClick={handleVoidTx}
                   className="flex-1 py-2.5 text-xs font-bold rounded-[10px] bg-red-600 text-white shadow-md hover:bg-red-700"
                 >

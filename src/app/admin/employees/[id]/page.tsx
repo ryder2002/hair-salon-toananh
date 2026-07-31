@@ -5,10 +5,9 @@ import { useRouter, useParams } from "next/navigation";
 import { ArrowLeft, Lock, Unlock, Save, CheckCircle2, DollarSign, Percent, Trash2, AlertTriangle, X } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
-import { addAuditLog } from "@/lib/audit-log";
 import { deleteEmployeeAction, toggleEmployeeStatusAction, fetchEmployeesAction } from "@/server/actions/employees";
 import { logAuditAction } from "@/server/actions/audit";
-import { getEmployees, deleteEmployee, toggleEmployeeStatus } from "@/lib/employee-store";
+import { updateSalarySettingsAction } from "@/server/actions/payroll";
 
 export default function EmployeeDetailPage() {
   const router = useRouter();
@@ -38,9 +37,9 @@ export default function EmployeeDetailPage() {
           setUsername((foundDb.email || "").split("@")[0] || id);
           setJobTitle(foundDb.job_title || "Thợ cắt tóc");
           setStatus(foundDb.status || "active");
-          setRawBaseSalary(String(foundDb.salary_settings?.[0]?.base_salary || 6000000));
-          setRawAllowance(String(foundDb.salary_settings?.[0]?.allowance || 500000));
-          setCommissionRate(String(foundDb.salary_settings?.[0]?.commission_rate || 8.0));
+          setRawBaseSalary(String(foundDb.salary_settings?.[0]?.base_salary ?? 0));
+          setRawAllowance(String(foundDb.salary_settings?.[0]?.allowance ?? 0));
+          setCommissionRate(String(foundDb.salary_settings?.[0]?.commission_rate ?? 0));
           return;
         }
       } catch (err) {
@@ -57,6 +56,7 @@ export default function EmployeeDetailPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    await updateSalarySettingsAction([{ employee_id: id, base_salary: Number(baseSalaryNum), allowance: Number(allowanceNum), commission_rate: Number(commissionRate) }]);
     setSaved(true);
     await logAuditAction({
       action: "STAFF_UPDATED",
@@ -327,4 +327,3 @@ export default function EmployeeDetailPage() {
     </div>
   );
 }
-

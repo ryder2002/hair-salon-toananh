@@ -6,8 +6,6 @@ import { ArrowLeft, User, Mail, Phone, Briefcase, Lock, DollarSign, Percent, Che
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 
-import { addEmployee } from "@/lib/employee-store";
-import { addAuditLog } from "@/lib/audit-log";
 import { createEmployeeAction } from "@/server/actions/employees";
 import { logAuditAction } from "@/server/actions/audit";
 
@@ -18,7 +16,7 @@ export default function AddEmployeePage() {
   const [username, setUsername] = useState("");
   const [phone, setPhone] = useState("");
   const [jobTitle, setJobTitle] = useState("Thợ cắt tóc");
-  const [password, setPassword] = useState("123456");
+  const [password, setPassword] = useState("");
   const [rawBaseSalary, setRawBaseSalary] = useState("6000000");
   const [rawAllowance, setRawAllowance] = useState("500000");
   const [commissionRate, setCommissionRate] = useState("8.0");
@@ -199,7 +197,7 @@ export default function AddEmployeePage() {
                     type="text"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    placeholder="123456"
+                    placeholder="Tối thiểu 8 ký tự"
                     required
                     className="w-full bg-[#F7F3EC]/50 border border-[rgba(23,23,23,0.14)] rounded-[10px] pl-9 pr-3 py-2.5 text-sm text-[#171717] focus:outline-none focus:border-[#741F2C]"
                   />

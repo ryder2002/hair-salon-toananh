@@ -1,8 +1,13 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireAdmin } from "@/lib/supabase/authz";
 
 export async function clearAllDatabaseDataAction() {
+  await requireAdmin();
+  if (process.env.ALLOW_DESTRUCTIVE_RESET !== "true") {
+    return { success: false, error: "Destructive reset is disabled" };
+  }
   const adminClient = createAdminClient();
 
   try {

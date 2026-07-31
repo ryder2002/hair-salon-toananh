@@ -7,9 +7,9 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { BarberIcon } from "@/components/ui/BarberIcon";
 import { formatVND } from "@/lib/money";
-import { getEmployees, StoredEmployee } from "@/lib/employee-store";
 import { fetchEmployeesAction } from "@/server/actions/employees";
 import { fetchRevenuesAction } from "@/server/actions/revenue";
+type StoredEmployee = { id: string; username: string; fullName: string; phone: string; jobTitle: string; baseSalary: number; allowance: number; commissionRate: number; status: string; monthRevenue: number; createdAt: string };
 
 export default function EmployeesPage() {
   const [search, setSearch] = useState("");
@@ -45,9 +45,9 @@ export default function EmployeesPage() {
             fullName: e.full_name,
             phone: e.phone || "",
             jobTitle: e.job_title || "Thợ cắt tóc",
-            baseSalary: e.salary_settings?.[0]?.base_salary || 6000000,
-            allowance: e.salary_settings?.[0]?.allowance || 500000,
-            commissionRate: e.salary_settings?.[0]?.commission_rate || 8.0,
+            baseSalary: e.salary_settings?.[0]?.base_salary ?? 0,
+            allowance: e.salary_settings?.[0]?.allowance ?? 0,
+            commissionRate: e.salary_settings?.[0]?.commission_rate ?? 0,
             status: e.status || "active",
             monthRevenue: revenueMap[e.id] || 0,
             createdAt: new Date().toISOString(),

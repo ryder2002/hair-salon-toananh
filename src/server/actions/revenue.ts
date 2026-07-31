@@ -1,39 +1,22 @@
 "use server";
 
-import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireActiveProfile, requireAdmin } from "@/lib/supabase/authz";
 import { RevenueEntrySchema } from "@/lib/validations";
-import { sendWebPushNotificationToAllAction } from "@/server/actions/push";
 
 export async function fetchRevenuesAction(date?: string) {
-  const adminClient = createAdminClient();
-  
-  let query = adminClient
+  const { profile, supabase } = await requireActiveProfile();
+  let query = supabase
     .from("revenue_entries")
-    .select(`
-      id,
-      amount,
-      payment_method,
-      service_name,
-      note,
-      business_date,
-      performed_at,
-      status,
-      employee_id,
-      profiles:employee_id (full_name, avatar_url)
-    `)
-    .order("performed_at", { ascending: false });
-
-  if (date) {
-    query = query.eq("business_date", date);
-  }
-
+    .select("id, amount, payment_method, service_name, note, business_date, performed_at, status, employee_id, created_by, profiles:employee_id(full_name, avatar_url)")
+    .eq("shop_id", profile.shop_id)
+    .order("performed_at", { ascending: false })
+    .limit(500);
+  if (date) query = query.eq("business_date", date);
+  if (profile.role !== "admin") query = query.eq("employee_id", profile.id);
   const { data, error } = await query;
-  if (error) {
-    console.error("Error fetching revenues:", error);
-    return [];
-  }
-  return data;
+  if (error) throw new Error(error.message);
+  return data || [];
 }
 
 export async function createRevenueEntryAction(formData: {
@@ -45,121 +28,45 @@ export async function createRevenueEntryAction(formData: {
   business_date: string;
   idempotency_key: string;
 }) {
+  const { profile, supabase } = await requireActiveProfile();
   const validated = RevenueEntrySchema.parse(formData);
-  const adminClient = createAdminClient();
-  const shopId = "11111111-1111-1111-1111-111111111111";
+  const { data, error } = await supabase.rpc("record_revenue", {
+    p_business_date: validated.business_date,
+    p_amount: validated.amount,
+    p_payment_method: validated.payment_method,
+    p_service_name: validated.service_name || null,
+    p_note: validated.note || null,
+    p_idempotency_key: validated.idempotency_key,
+    p_employee_id: profile.role === "admin" ? formData.employee_id || null : null,
+  });
+  if (error) throw new Error(error.message);
 
-  let empId = formData.employee_id;
-  let empName = "Nhân viên";
-
-  if (empId) {
-    const { data: empProf } = await adminClient
-      .from("profiles")
-      .select("id, full_name")
-      .eq("id", empId)
-      .single();
-    if (empProf) {
-      empName = empProf.full_name;
+  // Notifications are written only after the authoritative insert succeeds.
+  const row = data as any;
+  if (profile.role !== "admin") {
+    const admin = createAdminClient();
+    const { data: admins } = await admin.from("profiles").select("id").eq("shop_id", profile.shop_id).eq("role", "admin").eq("status", "active");
+    if (admins?.length) {
+      await admin.from("notifications").insert(admins.map((adminProfile) => ({
+        shop_id: profile.shop_id,
+        recipient_id: adminProfile.id,
+        type: "REVENUE_RECORDED",
+        title: "Nhân viên ghi nhận doanh thu mới",
+        message: `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ`,
+        data: { url: "/admin/revenue", revenue_id: row?.id || null },
+      })));
     }
   }
-
-  if (!empId) {
-    // Fetch active employee profile first, otherwise fallback
-    const { data: empProfiles } = await adminClient
-      .from("profiles")
-      .select("id, full_name")
-      .eq("shop_id", shopId)
-      .eq("role", "employee")
-      .limit(1);
-
-    if (empProfiles && empProfiles.length > 0) {
-      empId = empProfiles[0].id;
-      empName = empProfiles[0].full_name;
-    } else {
-      const { data: anyProfiles } = await adminClient
-        .from("profiles")
-        .select("id, full_name")
-        .eq("shop_id", shopId)
-        .limit(1);
-      if (anyProfiles && anyProfiles.length > 0) {
-        empId = anyProfiles[0].id;
-        empName = anyProfiles[0].full_name;
-      }
-    }
-  }
-
-  if (!empId) {
-    empId = "a0000000-0000-0000-0000-000000000001";
-  }
-
-  const { data, error } = await adminClient
-    .from("revenue_entries")
-    .insert({
-      shop_id: shopId,
-      employee_id: empId,
-      amount: validated.amount,
-      payment_method: validated.payment_method,
-      service_name: validated.service_name,
-      note: validated.note,
-      business_date: validated.business_date,
-      performed_at: new Date().toISOString(),
-      idempotency_key: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(validated.idempotency_key)
-        ? validated.idempotency_key
-        : crypto.randomUUID(),
-      created_by: empId,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    console.error("Error inserting revenue entry:", error);
-    throw new Error(error.message);
-  }
-
-  // Find all Admin profiles for this shop to send notification
-  const { data: adminProfiles } = await adminClient
-    .from("profiles")
-    .select("id")
-    .eq("shop_id", shopId)
-    .eq("role", "admin");
-
-  const notifMessage = `${empName} vừa tạo đơn "${validated.service_name || "Dịch vụ tóc"}" (${validated.amount.toLocaleString("vi-VN")} đ - ${validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"})`;
-
-  if (adminProfiles && adminProfiles.length > 0) {
-    const notifications = adminProfiles.map((adm) => ({
-      shop_id: shopId,
-      recipient_id: adm.id,
-      type: "REVENUE_RECORDED",
-      title: "Nhân viên ghi nhận doanh thu mới",
-      message: notifMessage,
-      data: { url: "/admin/revenue" },
-    }));
-    await adminClient.from("notifications").insert(notifications);
-  }
-
-  // Trigger WebPush Notification to registered Mobile/Browser devices
-  sendWebPushNotificationToAllAction(
-    "Nhân viên ghi nhận doanh thu mới",
-    notifMessage,
-    "/admin/revenue"
-  ).catch((err) => console.warn("Web Push trigger warning:", err));
-
-  return data;
+  return row;
 }
 
 export async function voidRevenueEntryAction(revenueId: string, voidReason?: string) {
-  const adminClient = createAdminClient();
-  const { data, error } = await adminClient
-    .from("revenue_entries")
-    .update({
-      status: "voided",
-      voided_at: new Date().toISOString(),
-      void_reason: voidReason || "Hủy đơn nhầm",
-    })
-    .eq("id", revenueId)
-    .select()
-    .single();
-
+  const { profile, supabase } = await requireAdmin();
+  if (!voidReason || voidReason.trim().length < 3) throw new Error("A void reason is required");
+  const { data, error } = await supabase.from("revenue_entries")
+    .update({ status: "voided", voided_at: new Date().toISOString(), voided_by: profile.id, void_reason: voidReason.trim(), updated_at: new Date().toISOString() })
+    .eq("id", revenueId).eq("shop_id", profile.shop_id).eq("status", "recorded")
+    .select().single();
   if (error) throw new Error(error.message);
   return data;
 }
@@ -171,31 +78,25 @@ export async function updateRevenueEntryAction(formData: {
   service_name?: string;
   note?: string;
 }) {
-  const adminClient = createAdminClient();
-  const { data, error } = await adminClient
+  const { profile, supabase } = await requireActiveProfile();
+  if (!Number.isInteger(formData.amount) || formData.amount <= 0) throw new Error("Invalid amount");
+  const { data: existing, error: existingError } = await supabase.from("revenue_entries").select("business_date").eq("id", formData.id).eq("shop_id", profile.shop_id).single();
+  if (existingError) throw new Error(existingError.message);
+  const { data: closing } = await supabase.from("daily_closings").select("id").eq("shop_id", profile.shop_id).eq("business_date", existing.business_date).eq("is_closed", true).maybeSingle();
+  if (closing) throw new Error("Business day is closed");
+  const query = supabase
     .from("revenue_entries")
-    .update({
-      amount: formData.amount,
-      payment_method: formData.payment_method,
-      service_name: formData.service_name || "Dịch vụ tóc",
-      note: formData.note,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", formData.id)
-    .select()
-    .single();
-
+    .update({ amount: formData.amount, payment_method: formData.payment_method, service_name: formData.service_name || "Dịch vụ tóc", note: formData.note, updated_at: new Date().toISOString() })
+    .eq("id", formData.id).eq("shop_id", profile.shop_id).eq("status", "recorded");
+  const scoped = profile.role === "admin" ? query : query.eq("employee_id", profile.id);
+  const { data, error } = await scoped.select().single();
   if (error) throw new Error(error.message);
   return data;
 }
 
-export async function closeBusinessDayAction(shopId: string, businessDate: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.rpc("close_business_day", {
-    p_shop_id: shopId,
-    p_business_date: businessDate,
-  });
-
+export async function closeBusinessDayAction(businessDate: string) {
+  const { supabase } = await requireAdmin();
+  const { data, error } = await supabase.rpc("close_business_day", { p_business_date: businessDate });
   if (error) throw new Error(error.message);
   return data;
 }

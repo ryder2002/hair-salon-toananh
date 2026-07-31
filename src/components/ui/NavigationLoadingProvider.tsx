@@ -7,24 +7,17 @@ import { BrandLoadingOverlay } from "./BrandLoadingOverlay";
 export function NavigationLoadingProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("Đang tải dữ liệu...");
 
   // Initial page load handler
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 400);
-    return () => clearTimeout(timer);
+    setIsLoading(false);
   }, []);
 
   // Pathname / SearchParams change listener
   useEffect(() => {
-    setIsLoading(true);
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 350);
-    return () => clearTimeout(timer);
+    setIsLoading(false);
   }, [pathname, searchParams]);
 
   // Click interceptor for navigation links & buttons

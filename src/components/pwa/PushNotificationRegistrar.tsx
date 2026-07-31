@@ -20,10 +20,6 @@ export function PushNotificationRegistrar() {
 
     if (currentPermission === "default") {
       setShowPromptBanner(true);
-      // Auto-trigger browser permission prompt after 1 second of loading
-      const timer = setTimeout(() => {
-        requestNotificationPermission();
-      }, 1000);
     } else if (currentPermission === "granted") {
       registerWebPushSubscription();
     }
@@ -64,7 +60,11 @@ export function PushNotificationRegistrar() {
       setShowPromptBanner(false);
 
       if (permission === "granted") {
-        await registerWebPushSubscription();
+        const subscription = await registerWebPushSubscription();
+        if (!subscription) {
+          setShowPromptBanner(true);
+          return;
+        }
         setActivatedToast(true);
 
         // Display test notification

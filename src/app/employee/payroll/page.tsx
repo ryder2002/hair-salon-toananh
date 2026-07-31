@@ -7,17 +7,16 @@ import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { formatVND } from "@/lib/money";
 import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
-import { getMonthPayroll, subscribePayroll, StoredPayrollRow } from "@/lib/payroll-store";
-
-import { getAuthSession } from "@/lib/auth";
+import { loadAuthSession, type UserSession } from "@/lib/auth";
+import { subscribeRealtime } from "@/lib/realtime";
 import { Lock, ShieldAlert, Loader2 } from "lucide-react";
 import { fetchMyPayrollSlipAction } from "@/server/actions/payroll";
 
 export default function EmployeePayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
   const [showMonthPickerModal, setShowMonthPickerModal] = useState(false);
-  const [session] = useState<any>(() => getAuthSession());
-  const [mySlip, setMySlip] = useState<StoredPayrollRow | null>(null);
+  const [session, setSession] = useState<UserSession | null>(null);
+  const [mySlip, setMySlip] = useState<any>(null);
   const [isPublished, setIsPublished] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -25,28 +24,15 @@ export default function EmployeePayrollPage() {
     setIsLoading(true);
     try {
       // Try Database server action first
-      const dbSlip = await fetchMyPayrollSlipAction(monthStr, session?.id);
+      const dbSlip = await fetchMyPayrollSlipAction(monthStr);
       if (dbSlip) {
         setIsPublished(dbSlip.status === "published" || dbSlip.status === "paid");
         setMySlip(dbSlip as any);
         return;
       }
 
-      // Fallback to stored payroll data if DB slip is empty
-      const data = getMonthPayroll(monthStr);
-      const publishedState = data.globalStatus === "published" || data.globalStatus === "paid";
-      setIsPublished(publishedState);
-
-      const currentName = session?.fullName || "";
-      const currentUsername = session?.username || "";
-
-      const empRow = data.rows.find(
-        (r: StoredPayrollRow) =>
-          (currentName && r.name.toLowerCase().includes(currentName.toLowerCase())) ||
-          (currentUsername && r.name.toLowerCase().includes(currentUsername.toLowerCase()))
-      ) || null;
-
-      setMySlip(empRow);
+      setIsPublished(false);
+      setMySlip(null);
     } catch (err) {
       console.error("Error loading employee payroll slip:", err);
     } finally {
@@ -55,16 +41,15 @@ export default function EmployeePayrollPage() {
   };
 
   useEffect(() => {
-    loadPayrollForMonth(selectedMonth);
-
-    const unsubscribe = subscribePayroll((updatedData) => {
-      if (updatedData.month === selectedMonth) {
-        loadPayrollForMonth(selectedMonth);
-      }
+    let cancelled = false;
+    void loadAuthSession().then((current) => {
+      if (cancelled) return;
+      setSession(current);
+      void loadPayrollForMonth(selectedMonth);
     });
-
-    return () => unsubscribe();
-  }, [selectedMonth, session]);
+    const unsubscribe = subscribeRealtime(() => { void loadPayrollForMonth(selectedMonth); });
+    return () => { cancelled = true; unsubscribe(); };
+  }, [selectedMonth]);
 
   const empName = session?.fullName || mySlip?.name || "Nhân viên";
   const jobTitle = mySlip?.roleTitle || "Thợ cắt tóc";

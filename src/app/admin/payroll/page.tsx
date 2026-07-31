@@ -22,8 +22,7 @@ import {
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, calculateTotalSalary } from "@/lib/money";
-import { addAuditLog } from "@/lib/audit-log";
-import { addNotification } from "@/lib/notification-store";
+import { logAuditAction } from "@/server/actions/audit";
 
 import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
@@ -70,7 +69,7 @@ export default function PayrollPage() {
     setIsLoading(true);
     try {
       const res = await fetchPayrollsAction(monthStr);
-      setGlobalStatus(res.globalStatus);
+      setGlobalStatus(res.globalStatus as "draft" | "locked" | "published" | "paid");
 
       const mappedRows: PayrollRow[] = res.rows.map((r) => ({
         id: r.id,
@@ -137,7 +136,7 @@ export default function PayrollPage() {
       await loadHistoryFromDatabase();
       setShowCreateModal(false);
 
-      addAuditLog({
+      await logAuditAction({
         action: "PAYROLL_CREATED",
         actorName: "Admin Manager",
         actorRole: "admin",
@@ -166,7 +165,7 @@ export default function PayrollPage() {
           : "Đánh dấu đã thanh toán toàn bộ";
 
       if (newStatus === "published") {
-        addNotification({
+        void Promise.resolve({
           title: "Công bố bảng lương mới",
           message: `Bảng lương ${selectedMonth} đã được công bố! Tất cả nhân viên có thể vào tab Bảng lương để kiểm tra.`,
           type: "payroll",
@@ -184,7 +183,7 @@ export default function PayrollPage() {
         }
       }
 
-      addAuditLog({
+      await logAuditAction({
         action: newStatus === "paid" ? "PAYROLL_PAID" : newStatus === "published" ? "PAYROLL_PUBLISHED" : "PAYROLL_LOCKED",
         actorName: "Admin Manager",
         actorRole: "admin",
@@ -227,7 +226,7 @@ export default function PayrollPage() {
       await updateSalarySettingsAction(payload);
       await loadPayrollFromDatabase(selectedMonth);
 
-      addAuditLog({
+      await logAuditAction({
         action: "SALARY_SETTINGS_UPDATED",
         actorName: "Admin Manager",
         actorRole: "admin",
@@ -764,4 +763,3 @@ export default function PayrollPage() {
     </div>
   );
 }
-

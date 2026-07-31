@@ -6,12 +6,13 @@ import { ArrowLeft, PlusCircle, Scissors, Edit3, Trash2, X, CheckCircle2, Bankno
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND, parseVNDInput } from "@/lib/money";
-import { getAuthSession } from "@/lib/auth";
+import { loadAuthSession, type UserSession } from "@/lib/auth";
+import { subscribeRealtime } from "@/lib/realtime";
 import { fetchRevenuesAction, voidRevenueEntryAction, updateRevenueEntryAction } from "@/server/actions/revenue";
 import { logAuditAction } from "@/server/actions/audit";
 
 export default function EmployeeRevenueHistoryPage() {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<UserSession | null>(null);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [totalAmount, setTotalAmount] = useState<bigint>(0n);
   const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
@@ -23,7 +24,7 @@ export default function EmployeeRevenueHistoryPage() {
   const [toastMsg, setToastMsg] = useState("");
 
   const loadHistory = async () => {
-    const activeSession = getAuthSession();
+    const activeSession = await loadAuthSession();
     setSession(activeSession);
 
     const empName = activeSession?.fullName || "";
@@ -62,6 +63,9 @@ export default function EmployeeRevenueHistoryPage() {
 
   useEffect(() => {
     loadHistory();
+    const unsubscribe = subscribeRealtime(() => { void loadHistory(); });
+    const interval = window.setInterval(() => { void loadHistory(); }, 30000);
+    return () => { unsubscribe(); window.clearInterval(interval); };
   }, []);
 
   const handleOpenTxModal = (tx: TransactionItem) => {

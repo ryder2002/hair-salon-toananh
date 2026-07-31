@@ -43,8 +43,8 @@ export default function AdminSettingsPage() {
     e.preventDefault();
     setPassError("");
 
-    if (newPassword.length < 6) {
-      setPassError("Mật khẩu mới phải từ 6 ký tự trở lên!");
+    if (newPassword.length < 8) {
+      setPassError("Mật khẩu mới phải từ 8 ký tự trở lên!");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -53,7 +53,6 @@ export default function AdminSettingsPage() {
     }
 
     const res = await changeUserPasswordAction({
-      username: "admin",
       oldPassword,
       newPassword,
     });
@@ -75,7 +74,8 @@ export default function AdminSettingsPage() {
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");
-    setTimeout(() => setMsg(""), 3000);
+    await clearAuthSession();
+    router.push("/login");
   };
 
   const handleLogout = () => {
@@ -85,8 +85,7 @@ export default function AdminSettingsPage() {
       actorRole: "admin",
       details: "Đã đăng xuất khỏi tài khoản Admin",
     }).catch(() => {});
-    clearAuthSession();
-    router.push("/login");
+    clearAuthSession().finally(() => router.push("/login"));
   };
 
   return (
@@ -231,7 +230,7 @@ export default function AdminSettingsPage() {
                     type={showNewPass ? "text" : "password"}
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Tối thiểu 6 ký tự"
+                    placeholder="Tối thiểu 8 ký tự"
                     required
                     className="w-full bg-[#F7F3EC]/50 border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3 py-2 text-sm text-[#171717]"
                   />

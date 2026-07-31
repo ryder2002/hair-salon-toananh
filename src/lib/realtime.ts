@@ -1,40 +1,32 @@
 import { createClient } from "@/lib/supabase/client";
 
-type ChangeCallback = (payload: any) => void;
+type ChangeCallback = (payload: unknown) => void;
 const subscribers = new Set<ChangeCallback>();
 let realtimeChannel: any = null;
+let initializing = false;
 
 export function initRealtimeSync() {
-  if (typeof window === "undefined" || realtimeChannel) return;
-
+  if (typeof window === "undefined" || realtimeChannel || initializing) return;
+  initializing = true;
   const supabase = createClient();
-  realtimeChannel = supabase
-    .channel("public-db-changes")
-    .on(
-      "postgres_changes",
-      { event: "*", schema: "public" },
-      (payload) => {
-        subscribers.forEach((cb) => {
-          try {
-            cb(payload);
-          } catch (e) {
-            console.error("Realtime callback error:", e);
-          }
+  supabase.auth.getUser().then(({ data }) => {
+    initializing = false;
+    if (!data.user || realtimeChannel) return;
+    void supabase.realtime.setAuth().then(() => {
+    realtimeChannel = supabase
+      .channel(`private-user-${data.user.id}`, { config: { private: true } })
+      .on("broadcast", { event: "invalidate" }, (payload) => {
+        subscribers.forEach((callback) => {
+          try { callback(payload); } catch (error) { console.error("Realtime callback error", error); }
         });
-      }
-    )
-    .subscribe((status) => {
-      if (status === "SUBSCRIBED") {
-        console.log("⚡ Realtime Supabase Sync Connected (< 50ms speed)!");
-      }
+      })
+      .subscribe();
     });
+  }).catch(() => { initializing = false; });
 }
 
 export function subscribeRealtime(callback: ChangeCallback) {
   subscribers.add(callback);
   initRealtimeSync();
-
-  return () => {
-    subscribers.delete(callback);
-  };
+  return () => subscribers.delete(callback);
 }

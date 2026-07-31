@@ -1,36 +1,56 @@
+import { createClient } from "@/lib/supabase/client";
+
 export interface UserSession {
-  id?: string;
+  id: string;
   username: string;
   fullName: string;
   role: "admin" | "employee";
-  token: string;
+  email?: string;
+  mustChangePassword?: boolean;
 }
 
-const AUTH_COOKIE_NAME = "barbershop_auth_role";
-const AUTH_STORAGE_KEY = "barbershop_user_session";
+// Session identity is kept in memory for rendering convenience only. The
+// authoritative session is the Supabase SSR cookie, never localStorage.
+let memorySession: UserSession | null = null;
 
 export function setAuthSession(session: UserSession) {
-  if (typeof window !== "undefined") {
-    // Set cookie for Next.js Middleware (expires in 30 days)
-    document.cookie = `${AUTH_COOKIE_NAME}=${session.role}; path=/; max-age=2592000; SameSite=Lax`;
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session));
-  }
+  memorySession = session;
 }
 
 export function getAuthSession(): UserSession | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const data = localStorage.getItem(AUTH_STORAGE_KEY);
-    if (!data) return null;
-    return JSON.parse(data);
-  } catch {
-    return null;
-  }
+  return memorySession;
 }
 
-export function clearAuthSession() {
+export async function loadAuthSession(): Promise<UserSession | null> {
+  if (memorySession) return memorySession;
+  if (typeof window === "undefined") return null;
+
+  const supabase = createClient();
+  const { data: auth } = await supabase.auth.getUser();
+  if (!auth.user) return null;
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, username, full_name, email, role, must_change_password")
+    .eq("id", auth.user.id)
+    .eq("status", "active")
+    .maybeSingle();
+
+  if (!profile) return null;
+  memorySession = {
+    id: profile.id,
+    username: profile.username || profile.email?.split("@")[0] || "",
+    fullName: profile.full_name,
+    role: profile.role,
+    email: profile.email || auth.user.email || undefined,
+    mustChangePassword: profile.must_change_password,
+  };
+  return memorySession;
+}
+
+export async function clearAuthSession() {
+  memorySession = null;
   if (typeof window !== "undefined") {
-    document.cookie = `${AUTH_COOKIE_NAME}=; path=/; max-age=0; SameSite=Lax`;
-    localStorage.removeItem(AUTH_STORAGE_KEY);
+    await createClient().auth.signOut({ scope: "local" });
   }
 }

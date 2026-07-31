@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { User, Lock, LogOut, CheckCircle2, ShieldCheck } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 
-import { getAuthSession, clearAuthSession } from "@/lib/auth";
+import { loadAuthSession, clearAuthSession, type UserSession } from "@/lib/auth";
 import { changeUserPasswordAction } from "@/server/actions/employees";
 import { logAuditAction } from "@/server/actions/audit";
 
@@ -15,13 +15,15 @@ import { registerWebPushSubscription } from "@/lib/push/webpush";
 
 export default function EmployeeProfilePage() {
   const router = useRouter();
-  const [session, setSession] = useState<any>(() => getAuthSession());
+  const [session, setSession] = useState<UserSession | null>(null);
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(true);
+
+  useEffect(() => { void loadAuthSession().then(setSession); }, []);
 
   const toggleNotif = async () => {
     const nextState = !notifEnabled;
@@ -37,8 +39,8 @@ export default function EmployeeProfilePage() {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      setMsg("Mật khẩu mới phải từ 6 ký tự trở lên!");
+    if (newPassword.length < 8) {
+      setMsg("Mật khẩu mới phải từ 8 ký tự trở lên!");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -48,7 +50,6 @@ export default function EmployeeProfilePage() {
 
     setLoading(true);
     const res = await changeUserPasswordAction({
-      username: session?.username || "nhanvien",
       oldPassword,
       newPassword,
     });
@@ -70,12 +71,12 @@ export default function EmployeeProfilePage() {
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");
-    setTimeout(() => setMsg(""), 3000);
+    await clearAuthSession();
+    router.push("/login");
   };
 
   const handleLogout = () => {
-    clearAuthSession();
-    router.push("/login");
+    clearAuthSession().finally(() => router.push("/login"));
   };
 
   const empName = session?.fullName || "Nhân viên";

@@ -1,60 +1,45 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import { createServerClient } from "@supabase/ssr";
+import { NextResponse, type NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
+  let response = NextResponse.next({ request });
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet: Array<{ name: string; value: string; options?: Record<string, unknown> }>) => {
+          cookiesToSet.forEach(({ name, value, options }) => request.cookies.set(name, value));
+          response = NextResponse.next({ request });
+          cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+        },
+      },
+    }
+  );
+
+  const { data } = await supabase.auth.getUser();
+  const user = data.user;
   const { pathname } = request.nextUrl;
-  const authRole = request.cookies.get("barbershop_auth_role")?.value;
+  const protectedRoute = pathname.startsWith("/admin") || pathname.startsWith("/employee");
 
-  const isProtectedAdmin = pathname.startsWith("/admin");
-  const isProtectedEmployee = pathname.startsWith("/employee");
-  const isLoginPage = pathname === "/login";
-  const isRootPage = pathname === "/";
-
-  // 1. Root page -> redirect depending on auth state
-  if (isRootPage) {
-    if (!authRole) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-    return NextResponse.redirect(
-      new URL(authRole === "admin" ? "/admin" : "/employee", request.url)
-    );
+  if (protectedRoute && !user) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
-
-  // 2. Protected routes -> check auth & role permissions
-  if (isProtectedAdmin) {
-    if (!authRole) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
-    // Block non-admin from accessing /admin pages
-    if (authRole !== "admin") {
-      return NextResponse.redirect(new URL("/employee", request.url));
-    }
+  if (pathname === "/login" && user) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    return NextResponse.redirect(new URL(profile?.role === "employee" ? "/employee" : "/admin", request.url));
   }
-
-  if (isProtectedEmployee) {
-    if (!authRole) {
-      return NextResponse.redirect(new URL("/login", request.url));
-    }
+  if (pathname === "/" && !user) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
-
-  // 3. User is on login page but already authenticated
-  if (isLoginPage && authRole) {
-    const targetPath = authRole === "admin" ? "/admin" : "/employee";
-    return NextResponse.redirect(new URL(targetPath, request.url));
+  if (pathname === "/" && user) {
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle();
+    return NextResponse.redirect(new URL(profile?.role === "employee" ? "/employee" : "/admin", request.url));
   }
-
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico, Logo.png (public assets)
-     */
-    "/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$).*)",
-  ],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.png$).*)"],
 };

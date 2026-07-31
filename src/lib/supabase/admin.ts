@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 
 export function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://rxtsyrebfrdbfupjlqse.supabase.co";
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.placeholder";
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!supabaseUrl || !serviceRoleKey) throw new Error("Supabase service-role credentials are required on the server");
 
   return createClient(supabaseUrl, serviceRoleKey, {
     auth: {

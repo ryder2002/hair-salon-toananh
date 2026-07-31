@@ -56,3 +56,10 @@ export async function removeOfflineRevenue(idempotency_key: string): Promise<voi
   if (!db) return;
   await db.delete("offline_revenues", idempotency_key);
 }
+
+export async function markOfflineRevenueFailed(idempotency_key: string, error_message: string): Promise<void> {
+  const db = await getDB();
+  if (!db) return;
+  const entry = await db.get("offline_revenues", idempotency_key);
+  if (entry) await db.put("offline_revenues", { ...entry, sync_status: "failed", error_message });
+}

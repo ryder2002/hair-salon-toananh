@@ -7,10 +7,7 @@ import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 import { getVietnamBusinessDate, formatTimeDisplay } from "@/lib/dates";
 import { saveOfflineRevenue } from "@/lib/offline/idb";
-import { addAuditLog } from "@/lib/audit-log";
-import { getAuthSession } from "@/lib/auth";
-
-import { addRevenueTransaction } from "@/lib/revenue-store";
+import { loadAuthSession } from "@/lib/auth";
 import { createRevenueEntryAction } from "@/server/actions/revenue";
 import { getCurrentBusinessDateAction, isDayClosedAction } from "@/server/actions/day-closing";
 
@@ -52,14 +49,13 @@ export default function RecordRevenuePage() {
     if (numericAmount <= 0n || isClosed) return;
     setErrorMsg("");
 
-    const currentSession = getAuthSession();
-    const actorName = currentSession?.fullName || "Nhân viên";
+    const currentSession = await loadAuthSession();
     const targetDate = businessDate || getVietnamBusinessDate();
+    const idempotencyKey = crypto.randomUUID();
 
     setLoading(true);
 
     try {
-      const idempotencyKey = crypto.randomUUID();
       await createRevenueEntryAction({
         employee_id: currentSession?.id,
         amount: Number(numericAmount),
@@ -75,6 +71,18 @@ export default function RecordRevenuePage() {
       setTimeout(() => router.push("/employee"), 1000);
     } catch (err: any) {
       console.error("Database revenue entry sync:", err);
+      await saveOfflineRevenue({
+        idempotency_key: idempotencyKey,
+        amount: Number(numericAmount),
+        payment_method: paymentMethod,
+        service_name: serviceName || "Dịch vụ tóc",
+        note,
+        business_date: targetDate,
+        performed_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        sync_status: "pending",
+        error_message: err?.message,
+      });
       setErrorMsg("Không thể lưu đơn hàng vào CSDL. Vui lòng kiểm tra lại kết nối.");
       setLoading(false);
     }

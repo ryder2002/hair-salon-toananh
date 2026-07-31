@@ -13,7 +13,6 @@ import { fetchRevenuesAction } from "@/server/actions/revenue";
 import { fetchEmployeesAction } from "@/server/actions/employees";
 import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
 import { getVietnamBusinessDate } from "@/lib/dates";
-import { getRevenueTransactions, subscribeRevenueTransactions } from "@/lib/revenue-store";
 import { subscribeRealtime } from "@/lib/realtime";
 
 export default function AdminDashboardPage() {
@@ -107,11 +106,10 @@ export default function AdminDashboardPage() {
   useEffect(() => {
     loadDashboardData();
 
-    const unsubscribe = subscribeRevenueTransactions(() => {
-      loadDashboardData();
-    });
+    const unsubscribe = subscribeRealtime(() => { loadDashboardData(); });
+    const interval = window.setInterval(() => loadDashboardData(), 30000);
 
-    return () => unsubscribe();
+    return () => { unsubscribe(); window.clearInterval(interval); };
   }, []);
 
   return (

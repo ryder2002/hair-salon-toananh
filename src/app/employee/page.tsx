@@ -7,15 +7,16 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
-import { getAuthSession } from "@/lib/auth";
-import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
+import { loadAuthSession, type UserSession } from "@/lib/auth";
+import { subscribeRealtime } from "@/lib/realtime";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
 import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
 import { fetchRevenuesAction } from "@/server/actions/revenue";
+import { syncOfflineRevenues } from "@/lib/offline/sync";
 
 export default function EmployeeDashboardPage() {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<UserSession | null>(null);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [todayTotal, setTodayTotal] = useState<bigint>(0n);
   const [todayCash, setTodayCash] = useState<bigint>(0n);
@@ -25,7 +26,7 @@ export default function EmployeeDashboardPage() {
   const [businessDate, setBusinessDate] = useState<string>("");
 
   const loadEmployeeData = async () => {
-    const activeSession = getAuthSession();
+    const activeSession = await loadAuthSession();
     setSession(activeSession);
 
     // Fetch dynamic business date from DB (advances automatically when Admin closes day)
@@ -36,7 +37,6 @@ export default function EmployeeDashboardPage() {
     setBusinessDate(currentDate);
 
     const empName = activeSession?.fullName || "";
-    const empUsername = activeSession?.username || "";
 
     // 1. Fetch DB revenues
     try {
@@ -81,23 +81,14 @@ export default function EmployeeDashboardPage() {
   };
 
   useEffect(() => {
+    void syncOfflineRevenues();
     loadEmployeeData();
-    const unsubscribe = subscribeRevenueTransactions(() => {
-      loadEmployeeData();
-    });
-
-    // Listen to BroadcastChannel for real-time Day Closing updates
-    let bc: BroadcastChannel | null = null;
-    try {
-      bc = new BroadcastChannel("barbershop_day_closing_channel");
-      bc.onmessage = () => {
-        loadEmployeeData();
-      };
-    } catch (e) {}
+    const unsubscribe = subscribeRealtime(() => { void loadEmployeeData(); });
+    const interval = window.setInterval(() => { void loadEmployeeData(); }, 30000);
 
     return () => {
       unsubscribe();
-      if (bc) bc.close();
+      window.clearInterval(interval);
     };
   }, []);
 

@@ -1,58 +1,24 @@
 "use server";
 
-import { createAdminClient } from "@/lib/supabase/admin";
+import { requireActiveProfile } from "@/lib/supabase/authz";
 
-export async function fetchNotificationsAction(recipientId?: string, role?: string) {
-  const adminClient = createAdminClient();
-  let query = adminClient
-    .from("notifications")
-    .select("*")
-    .order("created_at", { ascending: false });
-
-  if (recipientId) {
-    query = query.eq("recipient_id", recipientId);
-  } else if (role === "employee") {
-    query = query.neq("type", "REVENUE_RECORDED");
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("Error fetching notifications:", error.message);
-    return [];
-  }
+export async function fetchNotificationsAction() {
+  const { profile, supabase } = await requireActiveProfile();
+  const { data, error } = await supabase.from("notifications").select("id, type, title, message, data, read_at, created_at").eq("recipient_id", profile.id).order("created_at", { ascending: false }).limit(100);
+  if (error) throw new Error(error.message);
   return data || [];
 }
 
-export async function fetchUnreadNotificationCountAction(recipientId?: string, role?: string): Promise<number> {
-  const adminClient = createAdminClient();
-  let query = adminClient
-    .from("notifications")
-    .select("id", { count: "exact", head: true })
-    .is("read_at", null);
-
-  if (recipientId) {
-    query = query.eq("recipient_id", recipientId);
-  } else if (role === "employee") {
-    query = query.neq("type", "REVENUE_RECORDED");
-  }
-
-  const { count, error } = await query;
-
-  if (error) return 0;
+export async function fetchUnreadNotificationCountAction(): Promise<number> {
+  const { profile, supabase } = await requireActiveProfile();
+  const { count, error } = await supabase.from("notifications").select("id", { count: "exact", head: true }).eq("recipient_id", profile.id).is("read_at", null);
+  if (error) throw new Error(error.message);
   return count || 0;
 }
 
-export async function markAllNotificationsReadAction(recipientId?: string) {
-  const adminClient = createAdminClient();
-  let query = adminClient
-    .from("notifications")
-    .update({ read_at: new Date().toISOString() })
-    .is("read_at", null);
-
-  if (recipientId) {
-    query = query.eq("recipient_id", recipientId);
-  }
-
-  await query;
+export async function markAllNotificationsReadAction() {
+  const { profile, supabase } = await requireActiveProfile();
+  const { error } = await supabase.from("notifications").update({ read_at: new Date().toISOString() }).eq("recipient_id", profile.id).is("read_at", null);
+  if (error) throw new Error(error.message);
+  return { success: true };
 }

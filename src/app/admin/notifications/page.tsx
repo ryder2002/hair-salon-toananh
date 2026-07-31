@@ -12,13 +12,10 @@ import {
 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
-import {
-  getNotifications,
-  subscribeNotifications,
-  markAllNotificationsAsRead,
-  AppNotification,
-} from "@/lib/notification-store";
 import { fetchNotificationsAction, markAllNotificationsReadAction } from "@/server/actions/notifications";
+import { subscribeRealtime } from "@/lib/realtime";
+
+type AppNotification = { id: string; title: string; message: string; type: string; timestamp: string; isRead: boolean; url?: string };
 
 export default function NotificationsPage() {
   const [items, setItems] = useState<AppNotification[]>([]);
@@ -42,22 +39,20 @@ export default function NotificationsPage() {
     } catch (err) {
       console.warn("DB fetch notifications error:", err);
     }
-    setItems(getNotifications());
+    setItems([]);
   };
 
   useEffect(() => {
     loadNotifications();
-    const unsubscribe = subscribeNotifications((updated) => {
-      loadNotifications();
-    });
-    return () => unsubscribe();
+    const unsubscribe = subscribeRealtime(() => { void loadNotifications(); });
+    const interval = window.setInterval(() => { void loadNotifications(); }, 30000);
+    return () => { unsubscribe(); window.clearInterval(interval); };
   }, []);
 
   const markAllRead = async () => {
     try {
       await markAllNotificationsReadAction();
     } catch (e) {}
-    markAllNotificationsAsRead();
     loadNotifications();
   };
 

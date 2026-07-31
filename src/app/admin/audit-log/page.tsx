@@ -4,8 +4,8 @@ import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Search } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
-import { getAuditLogs, AuditLogEntry } from "@/lib/audit-log";
 import { fetchAuditLogsAction } from "@/server/actions/audit";
+type AuditLogEntry = { id: string; action: string; details: string; actorName: string; actorRole?: string; timestamp: string };
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
@@ -16,7 +16,14 @@ export default function AuditLogPage() {
       try {
         const dbLogs = await fetchAuditLogsAction();
         if (dbLogs) {
-          setLogs(dbLogs as AuditLogEntry[]);
+          setLogs((dbLogs as any[]).map((entry) => ({
+            id: entry.id,
+            action: entry.action || entry.event_type || "AUDIT",
+            details: entry.details || entry.metadata?.details || "",
+            actorName: entry.actor_name || entry.profiles?.full_name || "",
+            actorRole: entry.actor_role || entry.profiles?.role,
+            timestamp: new Date(entry.created_at || Date.now()).toLocaleString("vi-VN"),
+          })));
         } else {
           setLogs([]);
         }
@@ -108,4 +115,3 @@ export default function AuditLogPage() {
     </div>
   );
 }
-

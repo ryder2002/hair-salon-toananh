@@ -1,91 +1,47 @@
 "use server";
 
 import { createAdminClient } from "@/lib/supabase/admin";
+import { requireActiveProfile, requireAdmin } from "@/lib/supabase/authz";
 import webpush from "web-push";
 
-export async function savePushSubscriptionAction(subscriptionJSON: any, profileId?: string) {
-  try {
-    const adminClient = createAdminClient();
-    const shopId = "11111111-1111-1111-1111-111111111111";
-
-    if (!subscriptionJSON || !subscriptionJSON.endpoint) {
-      return { success: false, error: "Invalid subscription data" };
-    }
-
-    let targetProfileId = profileId;
-    if (!targetProfileId) {
-      const { data: profiles } = await adminClient
-        .from("profiles")
-        .select("id")
-        .eq("shop_id", shopId)
-        .limit(1);
-      targetProfileId = profiles?.[0]?.id || "a0000000-0000-0000-0000-000000000001";
-    }
-
-    const { error } = await adminClient
-      .from("push_subscriptions")
-      .upsert(
-        {
-          shop_id: shopId,
-          profile_id: targetProfileId,
-          endpoint: subscriptionJSON.endpoint,
-          p256dh: subscriptionJSON.keys?.p256dh || "default_p256dh",
-          auth: subscriptionJSON.keys?.auth || "default_auth",
-        },
-        { onConflict: "endpoint" }
-      );
-
-    if (error) {
-      console.error("Push subscription DB error:", error.message);
-      return { success: false, error: error.message };
-    }
-
-    return { success: true };
-  } catch (err: any) {
-    console.error("Save push subscription exception:", err);
-    return { success: false, error: err.message };
-  }
+export async function savePushSubscriptionAction(subscriptionJSON: any) {
+  const { profile } = await requireActiveProfile();
+  if (!subscriptionJSON?.endpoint || !subscriptionJSON.keys?.p256dh || !subscriptionJSON.keys?.auth) return { success: false, error: "Invalid subscription data" };
+  const admin = createAdminClient();
+  const { error } = await admin.from("push_subscriptions").upsert({ user_id: profile.id, endpoint: subscriptionJSON.endpoint, p256dh: subscriptionJSON.keys.p256dh, auth: subscriptionJSON.keys.auth, user_agent: subscriptionJSON.userAgent || null, updated_at: new Date().toISOString() }, { onConflict: "endpoint" });
+  if (error) return { success: false, error: error.message };
+  return { success: true };
 }
 
 export async function sendWebPushNotificationToAllAction(title: string, body: string, url?: string) {
-  try {
-    const adminClient = createAdminClient();
-    const { data: subs } = await adminClient.from("push_subscriptions").select("*");
-    if (!subs || subs.length === 0) return { success: true, count: 0 };
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { data: subscriptions } = await admin.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth");
+  return sendToSubscriptions(admin, subscriptions || [], title, body, url);
+}
 
-    const vapidPublic = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa-m9GYv50D15bS-16m_k8w6Q01";
-    const vapidPrivate = process.env.VAPID_PRIVATE_KEY || "dummy_private_key";
-    const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@toananhhairsalon.com";
+export async function sendWebPushNotificationToUsersAction(userIds: string[], title: string, body: string, url?: string) {
+  await requireAdmin();
+  const admin = createAdminClient();
+  const { data: subscriptions } = await admin.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth").in("user_id", userIds);
+  return sendToSubscriptions(admin, subscriptions || [], title, body, url);
+}
 
-    webpush.setVapidDetails(vapidSubject, vapidPublic, vapidPrivate);
-
-    const payload = JSON.stringify({
-      title,
-      body,
-      icon: "/icons/icon-192x192.png",
-      badge: "/icons/icon-192x192.png",
-      data: { url: url || "/admin/revenue" },
-    });
-
-    const sendPromises = subs.map(async (sub) => {
-      try {
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth,
-          },
-        };
-        await webpush.sendNotification(pushSubscription, payload);
-      } catch (err) {
-        console.warn("Failed sending push to subscription:", sub.endpoint, err);
-      }
-    });
-
-    await Promise.all(sendPromises);
-    return { success: true, count: subs.length };
-  } catch (err: any) {
-    console.error("sendWebPushNotificationToAllAction error:", err);
-    return { success: false, error: err.message };
+async function sendToSubscriptions(admin: ReturnType<typeof createAdminClient>, subscriptions: Array<{ id: string; user_id?: string; endpoint: string; p256dh: string; auth: string }>, title: string, body: string, url?: string) {
+  if (!subscriptions?.length) return { success: true, count: 0 };
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT;
+  if (!publicKey || !privateKey || !subject) return { success: false, error: "VAPID environment variables are missing" };
+  webpush.setVapidDetails(subject, publicKey, privateKey);
+  let sent = 0;
+  for (const subscription of subscriptions) {
+    try {
+      await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify({ title, body, icon: "/Logo.png", badge: "/Logo.png", data: { url: url || "/admin" } }));
+      sent += 1;
+    } catch (error: any) {
+      if (error?.statusCode === 404 || error?.statusCode === 410) await admin.from("push_subscriptions").delete().eq("id", subscription.id);
+    }
   }
+  return { success: true, count: sent };
 }

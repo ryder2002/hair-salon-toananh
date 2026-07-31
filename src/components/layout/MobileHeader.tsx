@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bell, X, CheckCircle, BellOff } from "lucide-react";
-import { getNotifications, subscribeNotifications, markAllNotificationsAsRead, AppNotification } from "@/lib/notification-store";
 import { fetchNotificationsAction, fetchUnreadNotificationCountAction, markAllNotificationsReadAction } from "@/server/actions/notifications";
-import { getAuthSession } from "@/lib/auth";
+import { loadAuthSession } from "@/lib/auth";
+type AppNotification = { id: string; title: string; message: string; type: string; isRead: boolean; timestamp: string; url?: string };
 
 interface MobileHeaderProps {
   title?: string;
@@ -24,21 +24,14 @@ export function MobileHeader({
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   useEffect(() => {
-    const session = getAuthSession();
-    if (session?.role) {
-      setRole(session.role);
-    }
-
-    async function loadNotifs() {
+    async function load() {
       try {
-        const activeSession = getAuthSession();
-        const recipientId = activeSession?.id;
-        const userRole = activeSession?.role || "employee";
-
-        const count = await fetchUnreadNotificationCountAction(recipientId, userRole);
+        const session = await loadAuthSession();
+        if (session?.role) setRole(session.role);
+        const count = await fetchUnreadNotificationCountAction();
         setUnreadCount(count);
 
-        const data = await fetchNotificationsAction(recipientId, userRole);
+        const data = await fetchNotificationsAction();
         if (data) {
           setNotifications(
             data.map((n: any) => ({
@@ -56,16 +49,14 @@ export function MobileHeader({
         console.warn("DB notifications fetch error:", e);
       }
     }
-
-    loadNotifs();
+    load();
   }, []);
 
   const homeHref = role === "admin" ? "/admin" : "/employee";
 
   const handleBellClick = async (e: React.MouseEvent) => {
-    const activeSession = getAuthSession();
     try {
-      await markAllNotificationsReadAction(activeSession?.id);
+      await markAllNotificationsReadAction();
       setUnreadCount(0);
     } catch (e) {}
 

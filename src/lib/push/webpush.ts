@@ -21,7 +21,12 @@ export async function registerWebPushSubscription(): Promise<PushSubscription | 
 
     const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
     if (!publicVapidKey) {
-      // VAPID key not set in environment, return null gracefully
+      console.warn("NEXT_PUBLIC_VAPID_PUBLIC_KEY is missing");
+      return null;
+    }
+    const applicationServerKey = urlBase64ToUint8Array(publicVapidKey);
+    if (applicationServerKey.length !== 65) {
+      console.error("Invalid VAPID public key: expected 65 decoded bytes");
       return null;
     }
 
@@ -30,7 +35,7 @@ export async function registerWebPushSubscription(): Promise<PushSubscription | 
       try {
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(publicVapidKey) as unknown as BufferSource,
+          applicationServerKey: applicationServerKey as unknown as BufferSource,
         });
       } catch (subErr) {
         console.warn("Push subscription skipped (invalid key or unsupported by browser):", subErr);
@@ -39,7 +44,8 @@ export async function registerWebPushSubscription(): Promise<PushSubscription | 
     }
 
     if (subscription) {
-      savePushSubscriptionAction(subscription.toJSON()).catch(() => {});
+      const saved = await savePushSubscriptionAction(subscription.toJSON());
+      if (!saved.success) throw new Error(saved.error || "Unable to save push subscription");
     }
 
     return subscription;
