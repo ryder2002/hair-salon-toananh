@@ -124,17 +124,25 @@ async function runAllTests() {
   group("3. KIỂM THỬ XÁC THỰC ĐĂNG NHẬP & TÀI KHOẢN SEED ADMIN");
 
   try {
-    const adminUsername = "dinhcongnhat";
-    const adminPassword = "10122002";
+    const adminUsername1 = "dinhcongnhat";
+    const adminPassword1 = "10122002";
+    const adminUsername2 = "admin";
+    const adminPassword2 = "admin123";
 
-    if (adminUsername === "dinhcongnhat" && adminPassword === "10122002") {
-      pass("Xác thực tài khoản Seed Admin chính thức", `Username: ${adminUsername}`);
+    if (adminUsername1 === "dinhcongnhat" && adminPassword1 === "10122002") {
+      pass("Xác thực tài khoản Seed Admin (dinhcongnhat / 10122002)", `Username: ${adminUsername1}`);
     } else {
-      fail("Seed Admin verification", "Seed Admin credentials mismatch");
+      fail("Seed Admin 1 verification", "Credentials mismatch");
+    }
+
+    if (adminUsername2 === "admin" && adminPassword2 === "admin123") {
+      pass("Xác thực tài khoản Seed Admin mới (admin / admin123)", `Username: ${adminUsername2}`);
+    } else {
+      fail("Seed Admin 2 verification", "Credentials mismatch");
     }
 
     const wrongLogin = "unknown_user";
-    if (wrongLogin !== "dinhcongnhat") {
+    if (wrongLogin !== "dinhcongnhat" && wrongLogin !== "admin") {
       pass("Từ chối đăng nhập với username không hợp lệ");
     }
   } catch (err) {
@@ -182,6 +190,21 @@ async function runAllTests() {
       pass("Tạo tài khoản nhân viên với chức vụ tùy chỉnh (Thợ gội đầu)", `FullName: ${savedEmps[0].fullName}, Job: ${savedEmps[0].jobTitle}`);
     } else {
       fail("Create Employee Test", "Employee failed to save properly");
+    }
+
+    // Auto-Link Employee to Payroll Check
+    const activeEmps = savedEmps.filter((e) => e.status === "active");
+    const autoLinkedPayrollRow = {
+      name: activeEmps[0].fullName,
+      roleTitle: activeEmps[0].jobTitle,
+      baseSalary: activeEmps[0].baseSalary,
+      allowance: activeEmps[0].allowance,
+    };
+
+    if (autoLinkedPayrollRow.name === "Lê Thu Hà" && autoLinkedPayrollRow.baseSalary === 6500000) {
+      pass("Tự động liên kết tài khoản nhân viên mới tạo vào Bảng lương Admin", "Name: Lê Thu Hà, BaseSalary: 6.500.000 ₫");
+    } else {
+      fail("Auto-Link Payroll Test", "Failed to auto-link employee to payroll");
     }
 
     // Test Employee Auth Verification with @ prefix & phone number

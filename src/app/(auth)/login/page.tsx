@@ -32,17 +32,21 @@ export default function LoginPage() {
     setTimeout(() => {
       setLoading(false);
 
-      // 1. Admin verification (Seed Account)
-      if (cleanUsername === "dinhcongnhat" && cleanPassword === "10122002") {
+      // 1. Admin verification (Seed Accounts)
+      const isAdminSeed1 = cleanUsername === "dinhcongnhat" && cleanPassword === "10122002";
+      const isAdminSeed2 = cleanUsername === "admin" && cleanPassword === "admin123";
+
+      if (isAdminSeed1 || isAdminSeed2) {
+        const adminName = cleanUsername === "admin" ? "Quản trị viên (Admin)" : "Định Công Nhật (Admin)";
         setAuthSession({
-          username: "dinhcongnhat",
-          fullName: "Định Công Nhật (Admin)",
+          username: cleanUsername,
+          fullName: adminName,
           role: "admin",
           token: "admin_token_" + Date.now(),
         });
         addAuditLog({
           action: "USER_LOGIN",
-          actorName: "Định Công Nhật",
+          actorName: adminName,
           actorRole: "admin",
           details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
         });

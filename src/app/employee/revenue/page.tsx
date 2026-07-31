@@ -1,49 +1,70 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, PlusCircle } from "lucide-react";
+import { ArrowLeft, PlusCircle, Scissors } from "lucide-react";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
+import { getAuthSession } from "@/lib/auth";
+import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
 
 export default function EmployeeRevenueHistoryPage() {
-  const [filter, setFilter] = useState("all");
+  const [session, setSession] = useState<any>(null);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [totalAmount, setTotalAmount] = useState<bigint>(0n);
 
-  const transactions: TransactionItem[] = [
-    {
-      id: "e1",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Cắt tóc + Gội đầu",
-      amount: 250000n,
-      paymentMethod: "cash",
-      time: "09:35",
-      status: "recorded",
-    },
-    {
-      id: "e2",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Cạo mặt",
-      amount: 150000n,
-      paymentMethod: "bank_transfer",
-      time: "08:15",
-      status: "recorded",
-    },
-    {
-      id: "e3",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Uốn tóc nam",
-      amount: 350000n,
-      paymentMethod: "bank_transfer",
-      time: "Hôm qua 17:40",
-      status: "recorded",
-    },
-  ];
+  const loadHistory = () => {
+    const activeSession = getAuthSession();
+    setSession(activeSession);
 
-  const totalAmount = transactions.reduce((acc, t) => acc + BigInt(t.amount), 0n);
+    const empName = activeSession?.fullName || "";
+    const empUsername = activeSession?.username || "";
+
+    const allTx = getRevenueTransactions();
+
+    const empTx = allTx.filter((t: StoredTransaction) => {
+      const tStaff = t.staffName.toLowerCase();
+      const tUser = (t.username || "").toLowerCase();
+
+      return (
+        (empName && tStaff.includes(empName.toLowerCase())) ||
+        (empUsername && (tStaff.includes(empUsername.toLowerCase()) || tUser.includes(empUsername.toLowerCase())))
+      );
+    });
+
+    let sum = 0n;
+    const formattedList: TransactionItem[] = empTx.map((t: StoredTransaction) => {
+      const amt = BigInt(t.amount || 0);
+      if (t.status === "recorded") {
+        sum += amt;
+      }
+
+      return {
+        id: t.id,
+        staffName: t.staffName,
+        avatarType: t.avatarType || "scissors",
+        serviceName: t.serviceName,
+        amount: amt,
+        paymentMethod: t.paymentMethod,
+        time: t.time,
+        status: t.status,
+      };
+    });
+
+    setTransactions(formattedList);
+    setTotalAmount(sum);
+  };
+
+  useEffect(() => {
+    loadHistory();
+
+    const unsubscribe = subscribeRevenueTransactions(() => {
+      loadHistory();
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-28 max-w-md mx-auto relative shadow-xl">
@@ -72,14 +93,23 @@ export default function EmployeeRevenueHistoryPage() {
             <div className="text-xl font-extrabold text-[#741F2C] mt-0.5">{formatVND(totalAmount)}</div>
           </div>
           <div className="text-right text-xs font-bold text-[#171717]">
-            {transactions.length} lượt phục vụ
+            {transactions.filter((t) => t.status === "recorded").length} lượt phục vụ
           </div>
         </div>
 
         {/* Transactions List */}
         <div className="space-y-2.5">
           <h3 className="font-bold text-[#171717] text-sm">GIAO DỊCH CỦA TÔI</h3>
-          <RecentTransactionsList transactions={transactions} showStatusBadge={true} />
+          {transactions.length === 0 ? (
+            <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-6 text-center shadow-sm space-y-2">
+              <Scissors className="w-8 h-8 text-[rgba(23,23,23,0.3)] mx-auto" />
+              <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+                Chưa có lịch sử giao dịch nào được ghi nhận.
+              </p>
+            </div>
+          ) : (
+            <RecentTransactionsList transactions={transactions} showStatusBadge={true} />
+          )}
         </div>
       </main>
 

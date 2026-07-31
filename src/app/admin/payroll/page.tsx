@@ -46,32 +46,68 @@ interface PayrollRow {
   isPaid?: boolean;
 }
 
+import { getEmployees, StoredEmployee } from "@/lib/employee-store";
+import { getRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
+
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<"payroll" | "settings">("payroll");
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMonthPickerModal, setShowMonthPickerModal] = useState(false);
   const [toastMessage, setToastMessage] = useState("");
-  const [globalStatus, setGlobalStatus] = useState<"draft" | "locked" | "published" | "paid">("published");
+  const [globalStatus, setGlobalStatus] = useState<"draft" | "locked" | "published" | "paid">("draft");
   const [rows, setRows] = useState<PayrollRow[]>([]);
 
   // Load persisted payroll data on month change or initial render
   useEffect(() => {
     const data = getMonthPayroll(selectedMonth);
     setGlobalStatus(data.globalStatus);
-    const convertedRows: PayrollRow[] = data.rows.map((r) => ({
-      ...r,
-      baseSalary: BigInt(r.baseSalary || "0"),
-      allowance: BigInt(r.allowance || "0"),
-      eligibleRevenue: BigInt(r.eligibleRevenue || "0"),
-      commAmount: BigInt(r.commAmount || "0"),
-      bonus: BigInt(r.bonus || "0"),
-      deduction: BigInt(r.deduction || "0"),
-      totalSalary: BigInt(r.totalSalary || "0"),
-      status: r.status || data.globalStatus,
-      isPaid: r.isPaid ?? (r.status === "paid" || data.globalStatus === "paid"),
-    }));
-    setRows(convertedRows);
+
+    const activeEmployees = getEmployees().filter((e) => e.status === "active");
+    const allTx = getRevenueTransactions();
+
+    // Map stored payroll rows
+    const existingRowsMap = new Map<string, StoredPayrollRow>();
+    data.rows.forEach((r) => existingRowsMap.set(r.name.toLowerCase(), r));
+
+    // Build merged rows linking all active employees
+    const mergedRows: PayrollRow[] = activeEmployees.map((emp: StoredEmployee) => {
+      const normName = emp.fullName.toLowerCase();
+      const existing = existingRowsMap.get(normName);
+
+      // Compute revenue for this employee from revenue-store
+      const empRevenue = allTx
+        .filter((t: StoredTransaction) => t.status === "recorded" && (t.staffName.toLowerCase().includes(normName) || (t.username && t.username.toLowerCase() === emp.username.toLowerCase())))
+        .reduce((acc, t) => acc + BigInt(t.amount || "0"), 0n);
+
+      const baseSalary = BigInt(existing ? existing.baseSalary : emp.baseSalary || 6000000);
+      const allowance = BigInt(existing ? existing.allowance : emp.allowance || 500000);
+      const commPercent = existing ? existing.commPercent : emp.commissionRate || 10;
+      const eligibleRevenue = empRevenue > 0n ? empRevenue : BigInt(existing?.eligibleRevenue || "0");
+      const commAmount = calculateCommission(eligibleRevenue, commPercent);
+      const bonus = BigInt(existing?.bonus || "0");
+      const deduction = BigInt(existing?.deduction || "0");
+      const totalSalary = calculateTotalSalary(baseSalary, allowance, commAmount, bonus, deduction);
+
+      return {
+        id: existing?.id || emp.id,
+        name: emp.fullName,
+        isManager: emp.jobTitle.toLowerCase().includes("quản lý"),
+        roleTitle: emp.jobTitle || "Thợ cắt tóc",
+        baseSalary,
+        allowance,
+        commPercent,
+        eligibleRevenue,
+        commAmount,
+        bonus,
+        deduction,
+        totalSalary,
+        status: existing?.status || data.globalStatus,
+        isPaid: existing?.isPaid ?? (existing?.status === "paid" || data.globalStatus === "paid"),
+      };
+    });
+
+    setRows(mergedRows);
   }, [selectedMonth]);
 
   // Helper to persist updated rows back to storage
