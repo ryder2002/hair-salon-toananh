@@ -37,7 +37,10 @@ async function sendToSubscriptions(admin: ReturnType<typeof createAdminClient>, 
   let sent = 0;
   for (const subscription of subscriptions) {
     try {
-      await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify({ title, body, icon: "/Logo.png", badge: "/Logo.png", data: { url: url || "/admin" } }));
+      await webpush.sendNotification(
+        { endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } },
+        JSON.stringify({ title, body, message: body, icon: "/Logo.png", badge: "/Logo.png", data: { url: url || "/admin" } })
+      );
       sent += 1;
     } catch (error: any) {
       if (error?.statusCode === 404 || error?.statusCode === 410) await admin.from("push_subscriptions").delete().eq("id", subscription.id);

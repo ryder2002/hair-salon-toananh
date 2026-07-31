@@ -254,8 +254,10 @@ export async function createRevenueEntryAction(formData: {
 
     if (admins?.length) {
       const adminIds = admins.map((a: any) => a.id);
-      const title = "Nhân viên ghi nhận doanh thu mới";
-      const message = `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ (${validated.service_name || "Dịch vụ tóc"})`;
+      const paymentStr = validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản";
+      const serviceStr = validated.service_name ? ` (${validated.service_name})` : "";
+      const title = `💈 ${profile.full_name} vừa ghi doanh thu mới`;
+      const message = `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ${serviceStr} • ${paymentStr}`;
 
       const { error: notificationError } = await admin.from("notifications").insert(
         adminIds.map((adminId: string) => ({

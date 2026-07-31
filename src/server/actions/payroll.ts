@@ -79,13 +79,63 @@ export async function updatePayrollStatusAction(payrollMonthStr: string, status:
   const { data, error } = await supabase.rpc(rpc, { p_payroll_month: month, ...(status === "paid" ? { p_employee_id: null } : {}) });
   if (error) throw new Error(error.message);
   if (status === "published") {
-    const { data: publishedRows } = await supabase.from("payrolls").select("employee_id").eq("shop_id", profile.shop_id).eq("payroll_month", month).eq("status", "published");
-    const employeeIds = (publishedRows || []).map((row: any) => row.employee_id).filter(Boolean);
+    const { data: employees } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("shop_id", profile.shop_id)
+      .eq("role", "employee")
+      .eq("status", "active");
+
+    const employeeIds = (employees || []).map((row: any) => row.id).filter(Boolean);
     if (employeeIds.length) {
+      const title = "📢 BẢNG LƯƠNG ĐÃ ĐƯỢC CÔNG BỐ";
+      const message = `Bảng lương kỳ ${payrollMonthStr} đã được Quản lý công bố. Hãy vào mục Bảng lương để xem chi tiết thu nhập của bạn!`;
+
+      await supabase.from("notifications").insert(
+        employeeIds.map((empId: string) => ({
+          shop_id: profile.shop_id,
+          recipient_id: empId,
+          type: "PAYROLL_PUBLISHED",
+          title,
+          message,
+          data: { url: "/employee/payroll", month: payrollMonthStr },
+        }))
+      );
+
       try {
-        await sendWebPushNotificationToUsersAction(employeeIds, "Bảng lương đã được công bố", `Bảng lương ${payrollMonthStr} đã được công bố.`, "/employee/payroll");
+        await sendWebPushNotificationToUsersAction(employeeIds, title, message, "/employee/payroll");
       } catch (pushError) {
         console.warn("Payroll published but Web Push delivery failed", pushError);
+      }
+    }
+  } else if (status === "paid") {
+    const { data: employees } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("shop_id", profile.shop_id)
+      .eq("role", "employee")
+      .eq("status", "active");
+
+    const employeeIds = (employees || []).map((row: any) => row.id).filter(Boolean);
+    if (employeeIds.length) {
+      const title = "💵 ĐÃ THANH TOÁN LƯƠNG";
+      const message = `Lương kỳ ${payrollMonthStr} của bạn đã được Salon thanh toán thành công!`;
+
+      await supabase.from("notifications").insert(
+        employeeIds.map((empId: string) => ({
+          shop_id: profile.shop_id,
+          recipient_id: empId,
+          type: "PAYROLL_PAID",
+          title,
+          message,
+          data: { url: "/employee/payroll", month: payrollMonthStr },
+        }))
+      );
+
+      try {
+        await sendWebPushNotificationToUsersAction(employeeIds, title, message, "/employee/payroll");
+      } catch (pushError) {
+        console.warn("Payroll paid Web Push delivery failed", pushError);
       }
     }
   }
@@ -94,9 +144,28 @@ export async function updatePayrollStatusAction(payrollMonthStr: string, status:
 
 export async function updateSinglePayrollPaidAction(payrollMonthStr: string, employeeId: string, isPaid: boolean) {
   if (!isPaid) throw new Error("Paid payroll cannot be reverted");
-  const { supabase } = await requireAdmin();
+  const { profile, supabase } = await requireAdmin();
   const { data, error } = await supabase.rpc("mark_payroll_paid", { p_payroll_month: parseMonthToDbDate(payrollMonthStr), p_employee_id: employeeId });
   if (error) throw new Error(error.message);
+
+  try {
+    const title = "💵 ĐÃ THANH TOÁN LƯƠNG";
+    const message = `Lương kỳ ${payrollMonthStr} của bạn đã được Salon thanh toán thành công!`;
+
+    await supabase.from("notifications").insert({
+      shop_id: profile.shop_id,
+      recipient_id: employeeId,
+      type: "PAYROLL_PAID",
+      title,
+      message,
+      data: { url: "/employee/payroll", month: payrollMonthStr },
+    });
+
+    await sendWebPushNotificationToUsersAction([employeeId], title, message, "/employee/payroll");
+  } catch (pushErr) {
+    console.warn("Single payroll paid push failed:", pushErr);
+  }
+
   return data;
 }
 

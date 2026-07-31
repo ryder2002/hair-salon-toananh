@@ -70,7 +70,7 @@ self.addEventListener("push", function (event) {
     const data = event.data.json();
     const title = data.title || "Barbershop Manager";
     const options = {
-      body: data.message || "Bạn có thông báo mới từ tiệm tóc",
+      body: data.body || data.message || "Bạn có thông báo mới từ tiệm tóc",
       icon: "/Logo.png",
       badge: "/Logo.png",
       data: data.data || {},
