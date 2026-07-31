@@ -16,6 +16,8 @@ import { logAuditAction } from "@/server/actions/audit";
 import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
+import { subscribeRealtime } from "@/lib/realtime";
+
 export default function RevenueManagementPage() {
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("today");
   const [employeeFilter, setEmployeeFilter] = useState<string>("all");
@@ -56,6 +58,10 @@ export default function RevenueManagementPage() {
 
   useEffect(() => {
     loadData();
+    const unsub = subscribeRealtime(() => {
+      loadData();
+    });
+    return () => unsub();
   }, []);
 
   const triggerToast = (msg: string) => {

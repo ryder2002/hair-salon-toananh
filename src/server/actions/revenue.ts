@@ -3,6 +3,7 @@
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { RevenueEntrySchema } from "@/lib/validations";
+import { sendWebPushNotificationToAllAction } from "@/server/actions/push";
 
 export async function fetchRevenuesAction(date?: string) {
   const adminClient = createAdminClient();
@@ -135,6 +136,13 @@ export async function createRevenueEntryAction(formData: {
     }));
     await adminClient.from("notifications").insert(notifications);
   }
+
+  // Trigger WebPush Notification to registered Mobile/Browser devices
+  sendWebPushNotificationToAllAction(
+    "Nhân viên ghi nhận doanh thu mới",
+    notifMessage,
+    "/admin/revenue"
+  ).catch((err) => console.warn("Web Push trigger warning:", err));
 
   return data;
 }

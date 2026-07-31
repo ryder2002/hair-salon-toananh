@@ -31,9 +31,14 @@ export function MobileHeader({
 
     async function loadNotifs() {
       try {
-        const count = await fetchUnreadNotificationCountAction();
+        const activeSession = getAuthSession();
+        const recipientId = activeSession?.id;
+        const userRole = activeSession?.role || "employee";
+
+        const count = await fetchUnreadNotificationCountAction(recipientId, userRole);
         setUnreadCount(count);
-        const data = await fetchNotificationsAction();
+
+        const data = await fetchNotificationsAction(recipientId, userRole);
         if (data) {
           setNotifications(
             data.map((n: any) => ({
@@ -58,8 +63,9 @@ export function MobileHeader({
   const homeHref = role === "admin" ? "/admin" : "/employee";
 
   const handleBellClick = async (e: React.MouseEvent) => {
+    const activeSession = getAuthSession();
     try {
-      await markAllNotificationsReadAction();
+      await markAllNotificationsReadAction(activeSession?.id);
       setUnreadCount(0);
     } catch (e) {}
 

@@ -14,6 +14,7 @@ import { fetchEmployeesAction } from "@/server/actions/employees";
 import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
 import { getVietnamBusinessDate } from "@/lib/dates";
 import { getRevenueTransactions, subscribeRevenueTransactions } from "@/lib/revenue-store";
+import { subscribeRealtime } from "@/lib/realtime";
 
 export default function AdminDashboardPage() {
   const [totalRevenue, setTotalRevenue] = useState<bigint>(0n);
@@ -59,7 +60,7 @@ export default function AdminDashboardPage() {
       const amt = BigInt(t.amount || 0);
       const pm = t.payment_method || t.paymentMethod;
       if (pm === "cash") cash += amt;
-      if (pm === "bank_transfer") bank += amt;
+      else bank += amt;
 
       const sName = t.profiles?.full_name || t.staffName || "Nhân viên";
       if (!staffMap[sName]) {
@@ -74,18 +75,16 @@ export default function AdminDashboardPage() {
         serviceName: t.service_name || t.serviceName || "Dịch vụ tóc",
         amount: amt,
         paymentMethod: pm,
-        time: t.performed_at
-          ? new Date(t.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
-          : t.time,
+        time: new Date(t.performed_at || Date.now()).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
         status: t.status,
       };
     });
 
     const total = cash + bank;
+    setTotalRevenue(total);
     setCashTotal(cash);
     setBankTotal(bank);
-    setTotalRevenue(total);
-    setTransactionCount(recorded.length);
+    setTransactionCount(formattedTxs.length);
     setRecentTransactions(formattedTxs);
 
     // Compute Staff Progress List

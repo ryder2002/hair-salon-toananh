@@ -72,11 +72,12 @@ export async function fetchPayrollsAction(payrollMonthStr: string) {
   const dbDate = parseMonthToDbDate(payrollMonthStr);
   const adminClient = createAdminClient();
 
-  // 1. Fetch active employee profiles
+  // 1. Fetch active employee profiles (exclude Admin)
   const { data: profiles, error: profileErr } = await adminClient
     .from("profiles")
     .select("id, full_name, job_title, role, status")
     .eq("status", "active")
+    .eq("role", "employee")
     .order("created_at", { ascending: true });
 
   if (profileErr) {
@@ -238,7 +239,8 @@ export async function generatePayrollAction(payrollMonthStr: string) {
   const { data: profiles } = await adminClient
     .from("profiles")
     .select("id")
-    .eq("status", "active");
+    .eq("status", "active")
+    .eq("role", "employee");
 
   if (!profiles) return { success: true };
 
