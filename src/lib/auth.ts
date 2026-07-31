@@ -1,4 +1,5 @@
 export interface UserSession {
+  id?: string;
   username: string;
   fullName: string;
   role: "admin" | "employee";

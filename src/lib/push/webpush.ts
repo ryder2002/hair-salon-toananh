@@ -1,3 +1,5 @@
+import { savePushSubscriptionAction } from "@/server/actions/push";
+
 /**
  * Registers Service Worker and subscribes browser to Web Push Notifications using VAPID key
  */
@@ -34,6 +36,10 @@ export async function registerWebPushSubscription(): Promise<PushSubscription | 
         console.warn("Push subscription skipped (invalid key or unsupported by browser):", subErr);
         return null;
       }
+    }
+
+    if (subscription) {
+      savePushSubscriptionAction(subscription.toJSON()).catch(() => {});
     }
 
     return subscription;

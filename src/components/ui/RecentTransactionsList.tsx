@@ -19,11 +19,13 @@ export interface TransactionItem {
 interface RecentTransactionsListProps {
   transactions?: TransactionItem[];
   showStatusBadge?: boolean;
+  onSelectTransaction?: (item: TransactionItem) => void;
 }
 
 export function RecentTransactionsList({
   transactions = [],
   showStatusBadge = false,
+  onSelectTransaction,
 }: RecentTransactionsListProps) {
   if (transactions.length === 0) {
     return (
@@ -43,7 +45,10 @@ export function RecentTransactionsList({
         return (
           <div
             key={t.id}
-            className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-3 sm:p-3.5 shadow-sm flex items-center justify-between gap-2 overflow-hidden"
+            onClick={() => onSelectTransaction && onSelectTransaction(t)}
+            className={`bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-3 sm:p-3.5 shadow-sm flex items-center justify-between gap-2 overflow-hidden ${
+              onSelectTransaction ? "cursor-pointer hover:bg-amber-50/50 transition-colors active:scale-[0.99]" : ""
+            }`}
           >
             {/* Left: Avatar & Info */}
             <div className="flex items-center space-x-2.5 min-w-0 flex-1">

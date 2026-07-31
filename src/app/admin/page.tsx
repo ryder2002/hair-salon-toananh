@@ -10,6 +10,7 @@ import { StaffRevenueProgressList, StaffRevenueItem } from "@/components/ui/Staf
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { DayClosingCard } from "@/components/ui/DayClosingCard";
 import { fetchRevenuesAction } from "@/server/actions/revenue";
+import { fetchEmployeesAction } from "@/server/actions/employees";
 import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
 import { getVietnamBusinessDate } from "@/lib/dates";
 import { getRevenueTransactions, subscribeRevenueTransactions } from "@/lib/revenue-store";
@@ -31,11 +32,14 @@ export default function AdminDashboardPage() {
     setBusinessDate(dateStr);
 
     let recorded: any[] = [];
+    let dbEmployees: any[] = [];
     try {
-      const dbData = await fetchRevenuesAction(dateStr);
-      if (dbData) {
-        recorded = dbData.filter((t: any) => t.status === "recorded");
-      }
+      const [dbData, emps] = await Promise.all([
+        fetchRevenuesAction(dateStr),
+        fetchEmployeesAction(),
+      ]);
+      if (dbData) recorded = dbData.filter((t: any) => t.status === "recorded");
+      if (emps) dbEmployees = emps;
     } catch (err) {
       console.warn("DB fetch error:", err);
     }
@@ -43,6 +47,13 @@ export default function AdminDashboardPage() {
     let cash = 0n;
     let bank = 0n;
     const staffMap: Record<string, { name: string; avatarType: any; revenue: bigint }> = {};
+
+    // Initialize staffMap with all active employees in DB
+    dbEmployees.forEach((e: any) => {
+      if (e.full_name) {
+        staffMap[e.full_name] = { name: e.full_name, avatarType: "scissors", revenue: 0n };
+      }
+    });
 
     const formattedTxs: TransactionItem[] = recorded.map((t: any) => {
       const amt = BigInt(t.amount || 0);

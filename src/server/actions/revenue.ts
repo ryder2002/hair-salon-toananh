@@ -36,6 +36,7 @@ export async function fetchRevenuesAction(date?: string) {
 }
 
 export async function createRevenueEntryAction(formData: {
+  employee_id?: string;
   amount: number;
   payment_method: "cash" | "bank_transfer";
   service_name?: string;
@@ -47,15 +48,48 @@ export async function createRevenueEntryAction(formData: {
   const adminClient = createAdminClient();
   const shopId = "11111111-1111-1111-1111-111111111111";
 
-  // Fetch first active profile or admin profile
-  const { data: profiles } = await adminClient
-    .from("profiles")
-    .select("id, full_name")
-    .eq("shop_id", shopId)
-    .limit(1);
+  let empId = formData.employee_id;
+  let empName = "Nhân viên";
 
-  const empId = profiles?.[0]?.id || "a0000000-0000-0000-0000-000000000001";
-  const empName = profiles?.[0]?.full_name || "Nhân viên";
+  if (empId) {
+    const { data: empProf } = await adminClient
+      .from("profiles")
+      .select("id, full_name")
+      .eq("id", empId)
+      .single();
+    if (empProf) {
+      empName = empProf.full_name;
+    }
+  }
+
+  if (!empId) {
+    // Fetch active employee profile first, otherwise fallback
+    const { data: empProfiles } = await adminClient
+      .from("profiles")
+      .select("id, full_name")
+      .eq("shop_id", shopId)
+      .eq("role", "employee")
+      .limit(1);
+
+    if (empProfiles && empProfiles.length > 0) {
+      empId = empProfiles[0].id;
+      empName = empProfiles[0].full_name;
+    } else {
+      const { data: anyProfiles } = await adminClient
+        .from("profiles")
+        .select("id, full_name")
+        .eq("shop_id", shopId)
+        .limit(1);
+      if (anyProfiles && anyProfiles.length > 0) {
+        empId = anyProfiles[0].id;
+        empName = anyProfiles[0].full_name;
+      }
+    }
+  }
+
+  if (!empId) {
+    empId = "a0000000-0000-0000-0000-000000000001";
+  }
 
   const { data, error } = await adminClient
     .from("revenue_entries")
@@ -68,7 +102,9 @@ export async function createRevenueEntryAction(formData: {
       note: validated.note,
       business_date: validated.business_date,
       performed_at: new Date().toISOString(),
-      idempotency_key: validated.idempotency_key,
+      idempotency_key: /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(validated.idempotency_key)
+        ? validated.idempotency_key
+        : crypto.randomUUID(),
       created_by: empId,
     })
     .select()
@@ -103,20 +139,41 @@ export async function createRevenueEntryAction(formData: {
   return data;
 }
 
-export async function voidRevenueEntryAction(revenueId: string, voidReason: string) {
-  const supabase = await createServerSupabaseClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) throw new Error("Unauthorized");
-
-  const { data, error } = await supabase
+export async function voidRevenueEntryAction(revenueId: string, voidReason?: string) {
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
     .from("revenue_entries")
     .update({
       status: "voided",
       voided_at: new Date().toISOString(),
-      voided_by: userData.user.id,
-      void_reason: voidReason,
+      void_reason: voidReason || "Hủy đơn nhầm",
     })
     .eq("id", revenueId)
+    .select()
+    .single();
+
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateRevenueEntryAction(formData: {
+  id: string;
+  amount: number;
+  payment_method: "cash" | "bank_transfer";
+  service_name?: string;
+  note?: string;
+}) {
+  const adminClient = createAdminClient();
+  const { data, error } = await adminClient
+    .from("revenue_entries")
+    .update({
+      amount: formData.amount,
+      payment_method: formData.payment_method,
+      service_name: formData.service_name || "Dịch vụ tóc",
+      note: formData.note,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", formData.id)
     .select()
     .single();
 

@@ -66,7 +66,7 @@ export function DayClosingCard({ onCloseDay }: DayClosingCardProps) {
                 closed ? "text-amber-800" : "text-emerald-700"
               }`}
             >
-              {closed ? "🔒 Đã chốt ngày" : "• Đang mở bán"}
+              {closed ? "🔒 Đã đóng" : "• Đang mở"}
             </div>
           </div>
         </div>

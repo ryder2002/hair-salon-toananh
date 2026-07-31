@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bell, X, CheckCircle, BellOff } from "lucide-react";
 import { getNotifications, subscribeNotifications, markAllNotificationsAsRead, AppNotification } from "@/lib/notification-store";
-import { fetchNotificationsAction, fetchUnreadNotificationCountAction } from "@/server/actions/notifications";
+import { fetchNotificationsAction, fetchUnreadNotificationCountAction, markAllNotificationsReadAction } from "@/server/actions/notifications";
 import { getAuthSession } from "@/lib/auth";
 
 interface MobileHeaderProps {
@@ -18,7 +18,7 @@ export function MobileHeader({
   unreadCount: initialCount,
   showLogo = true,
 }: MobileHeaderProps) {
-  const [unreadCount, setUnreadCount] = useState(initialCount ?? 0);
+  const [unreadCount, setUnreadCount] = useState<number>(0);
   const [role, setRole] = useState<"admin" | "employee">("employee");
   const [showEmpNotifModal, setShowEmpNotifModal] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
@@ -57,11 +57,15 @@ export function MobileHeader({
 
   const homeHref = role === "admin" ? "/admin" : "/employee";
 
-  const handleBellClick = (e: React.MouseEvent) => {
+  const handleBellClick = async (e: React.MouseEvent) => {
+    try {
+      await markAllNotificationsReadAction();
+      setUnreadCount(0);
+    } catch (e) {}
+
     if (role === "employee") {
       e.preventDefault();
       setShowEmpNotifModal(true);
-      markAllNotificationsAsRead();
     }
   };
 

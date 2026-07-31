@@ -59,8 +59,9 @@ export default function RecordRevenuePage() {
     setLoading(true);
 
     try {
-      const idempotencyKey = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      const idempotencyKey = crypto.randomUUID();
       await createRevenueEntryAction({
+        employee_id: currentSession?.id,
         amount: Number(numericAmount),
         payment_method: paymentMethod,
         service_name: serviceName || "Dịch vụ tóc",

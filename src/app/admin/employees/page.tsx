@@ -9,6 +9,7 @@ import { BarberIcon } from "@/components/ui/BarberIcon";
 import { formatVND } from "@/lib/money";
 import { getEmployees, StoredEmployee } from "@/lib/employee-store";
 import { fetchEmployeesAction } from "@/server/actions/employees";
+import { fetchRevenuesAction } from "@/server/actions/revenue";
 
 export default function EmployeesPage() {
   const [search, setSearch] = useState("");
@@ -18,7 +19,25 @@ export default function EmployeesPage() {
   useEffect(() => {
     async function loadData() {
       try {
-        const dbEmployees = await fetchEmployeesAction();
+        const [dbEmployees, dbRevenues] = await Promise.all([
+          fetchEmployeesAction(),
+          fetchRevenuesAction(),
+        ]);
+
+        const currentMonthPrefix = new Date().toISOString().substring(0, 7);
+        const revenueMap: Record<string, number> = {};
+
+        if (dbRevenues && dbRevenues.length > 0) {
+          dbRevenues.forEach((r: any) => {
+            if (r.status !== "voided" && (r.business_date || "").startsWith(currentMonthPrefix)) {
+              const empId = r.employee_id;
+              if (empId) {
+                revenueMap[empId] = (revenueMap[empId] || 0) + Number(r.amount || 0);
+              }
+            }
+          });
+        }
+
         if (dbEmployees && dbEmployees.length > 0) {
           const formatted: StoredEmployee[] = dbEmployees.map((e: any) => ({
             id: e.id,
@@ -30,7 +49,7 @@ export default function EmployeesPage() {
             allowance: e.salary_settings?.[0]?.allowance || 500000,
             commissionRate: e.salary_settings?.[0]?.commission_rate || 8.0,
             status: e.status || "active",
-            monthRevenue: 0,
+            monthRevenue: revenueMap[e.id] || 0,
             createdAt: new Date().toISOString(),
           }));
           setEmployeesList(formatted);

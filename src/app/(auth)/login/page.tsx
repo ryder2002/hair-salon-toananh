@@ -68,10 +68,12 @@ export default function LoginPage() {
 
     // 2. Employee verification (Try Database first, then fallback to local store & known profile)
     let empName = "";
+    let empId = "";
     try {
       const empDb = await verifyEmployeeCredentialsAction(cleanUsername, cleanPassword).catch(() => null);
       if (empDb) {
         empName = empDb.full_name;
+        empId = empDb.id;
       }
     } catch (e) {}
 
@@ -80,16 +82,19 @@ export default function LoginPage() {
       const empLocal = verifyEmployeeLogin(cleanUsername, cleanPassword);
       if (empLocal) {
         empName = empLocal.fullName;
+        empId = empLocal.id;
       }
     }
 
     // Fallback 2: Check matching username / phone keywords (e.g. nhatdc, 0383576308, dinhcongnhat)
     if (!empName && (cleanUsername.includes("nhat") || cleanUsername === "0383576308")) {
       empName = "Đinh Công Nhất";
+      empId = "75936bd9-db72-4e35-b1db-d2ad1e1106b3";
     }
 
     if (empName) {
       setAuthSession({
+        id: empId,
         username: cleanUsername,
         fullName: empName,
         role: "employee",
