@@ -83,15 +83,27 @@ export async function createRevenueEntryAction(formData: {
     throw new Error(error.message);
   }
 
-  // Create notification for Admin
+  // Find all Admin profiles for this shop to send notification
   const adminClient = createAdminClient();
-  await adminClient.from("notifications").insert({
-    shop_id: profile.shop_id,
-    recipient_id: userData.user.id,
-    type: "REVENUE_RECORDED",
-    title: "Nhân viên đã ghi nhận doanh thu",
-    message: `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ (${validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"})`,
-  });
+  const { data: adminProfiles } = await adminClient
+    .from("profiles")
+    .select("id")
+    .eq("shop_id", profile.shop_id)
+    .eq("role", "admin");
+
+  const notifMessage = `${profile.full_name} vừa tạo đơn "${validated.service_name || "Dịch vụ tóc"}" (${validated.amount.toLocaleString("vi-VN")} đ - ${validated.payment_method === "cash" ? "Tiền mặt" : "Chuyển khoản"})`;
+
+  if (adminProfiles && adminProfiles.length > 0) {
+    const notifications = adminProfiles.map((adm) => ({
+      shop_id: profile.shop_id,
+      recipient_id: adm.id,
+      type: "REVENUE_RECORDED",
+      title: "Nhân viên ghi nhận doanh thu mới",
+      message: notifMessage,
+      data: { url: "/admin/revenue" },
+    }));
+    await adminClient.from("notifications").insert(notifications);
+  }
 
   return data;
 }

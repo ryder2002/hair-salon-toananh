@@ -10,7 +10,8 @@ import { getCurrentVietnamMonthStr } from "@/lib/dates";
 import { getMonthPayroll, subscribePayroll, StoredPayrollRow } from "@/lib/payroll-store";
 
 import { getAuthSession } from "@/lib/auth";
-import { Lock, ShieldAlert } from "lucide-react";
+import { Lock, ShieldAlert, Loader2 } from "lucide-react";
+import { fetchMyPayrollSlipAction } from "@/server/actions/payroll";
 
 export default function EmployeePayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
@@ -18,23 +19,39 @@ export default function EmployeePayrollPage() {
   const [session] = useState<any>(() => getAuthSession());
   const [mySlip, setMySlip] = useState<StoredPayrollRow | null>(null);
   const [isPublished, setIsPublished] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const loadPayrollForMonth = (monthStr: string) => {
-    const data = getMonthPayroll(monthStr);
-    const publishedState = data.globalStatus === "published" || data.globalStatus === "paid";
-    setIsPublished(publishedState);
+  const loadPayrollForMonth = async (monthStr: string) => {
+    setIsLoading(true);
+    try {
+      // Try Database server action first
+      const dbSlip = await fetchMyPayrollSlipAction(monthStr, session?.id);
+      if (dbSlip) {
+        setIsPublished(dbSlip.status === "published" || dbSlip.status === "paid");
+        setMySlip(dbSlip as any);
+        return;
+      }
 
-    // Strictly match current logged-in employee session
-    const currentName = session?.fullName || "";
-    const currentUsername = session?.username || "";
+      // Fallback to stored payroll data if DB slip is empty
+      const data = getMonthPayroll(monthStr);
+      const publishedState = data.globalStatus === "published" || data.globalStatus === "paid";
+      setIsPublished(publishedState);
 
-    const empRow = data.rows.find(
-      (r: StoredPayrollRow) =>
-        (currentName && r.name.toLowerCase().includes(currentName.toLowerCase())) ||
-        (currentUsername && r.name.toLowerCase().includes(currentUsername.toLowerCase()))
-    ) || null;
+      const currentName = session?.fullName || "";
+      const currentUsername = session?.username || "";
 
-    setMySlip(empRow);
+      const empRow = data.rows.find(
+        (r: StoredPayrollRow) =>
+          (currentName && r.name.toLowerCase().includes(currentName.toLowerCase())) ||
+          (currentUsername && r.name.toLowerCase().includes(currentUsername.toLowerCase()))
+      ) || null;
+
+      setMySlip(empRow);
+    } catch (err) {
+      console.error("Error loading employee payroll slip:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   useEffect(() => {

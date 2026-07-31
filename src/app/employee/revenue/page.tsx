@@ -8,21 +8,53 @@ import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentT
 import { formatVND } from "@/lib/money";
 import { getAuthSession } from "@/lib/auth";
 import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
+import { fetchRevenuesAction } from "@/server/actions/revenue";
 
 export default function EmployeeRevenueHistoryPage() {
   const [session, setSession] = useState<any>(null);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [totalAmount, setTotalAmount] = useState<bigint>(0n);
 
-  const loadHistory = () => {
+  const loadHistory = async () => {
     const activeSession = getAuthSession();
     setSession(activeSession);
 
     const empName = activeSession?.fullName || "";
     const empUsername = activeSession?.username || "";
 
-    const allTx = getRevenueTransactions();
+    try {
+      const dbList = await fetchRevenuesAction();
+      if (dbList && dbList.length > 0) {
+        let sum = 0n;
+        const formattedList: TransactionItem[] = [];
 
+        dbList.forEach((e: any) => {
+          const amt = BigInt(e.amount || 0);
+          if (e.status === "recorded") {
+            sum += amt;
+          }
+
+          formattedList.push({
+            id: e.id,
+            staffName: e.profiles?.full_name || empName,
+            avatarType: "scissors",
+            serviceName: e.service_name || "Dịch vụ tóc",
+            amount: amt,
+            paymentMethod: e.payment_method,
+            time: new Date(e.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+            status: e.status,
+          });
+        });
+
+        setTransactions(formattedList);
+        setTotalAmount(sum);
+        return;
+      }
+    } catch (err) {
+      console.warn("DB employee revenue history fetch fallback:", err);
+    }
+
+    const allTx = getRevenueTransactions();
     const empTx = allTx.filter((t: StoredTransaction) => {
       const tStaff = t.staffName.toLowerCase();
       const tUser = (t.username || "").toLowerCase();

@@ -13,24 +13,33 @@ import {
   BarChart3,
   Percent,
   X,
-  CheckCircle2,
   Lock,
   Send,
   CreditCard,
   CheckCircle,
+  Loader2,
 } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
-import { formatVND, calculateCommission, calculateTotalSalary } from "@/lib/money";
-import { getMonthPayroll, saveMonthPayroll, StoredPayrollRow, MonthPayrollData } from "@/lib/payroll-store";
+import { formatVND, calculateTotalSalary } from "@/lib/money";
 import { addAuditLog } from "@/lib/audit-log";
 import { addNotification } from "@/lib/notification-store";
 
 import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
+import {
+  fetchPayrollsAction,
+  generatePayrollAction,
+  updatePayrollStatusAction,
+  updateSinglePayrollPaidAction,
+  updateSalarySettingsAction,
+  fetchPayrollHistoryAction,
+  PayrollMonthSummary,
+} from "@/server/actions/payroll";
 
 interface PayrollRow {
   id: string;
+  employee_id: string;
   name: string;
   isManager?: boolean;
   roleTitle: string;
@@ -46,9 +55,6 @@ interface PayrollRow {
   isPaid?: boolean;
 }
 
-import { getEmployees, StoredEmployee } from "@/lib/employee-store";
-import { getRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
-
 export default function PayrollPage() {
   const [activeTab, setActiveTab] = useState<"payroll" | "settings">("payroll");
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
@@ -57,82 +63,54 @@ export default function PayrollPage() {
   const [toastMessage, setToastMessage] = useState("");
   const [globalStatus, setGlobalStatus] = useState<"draft" | "locked" | "published" | "paid">("draft");
   const [rows, setRows] = useState<PayrollRow[]>([]);
+  const [historyList, setHistoryList] = useState<PayrollMonthSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Load persisted payroll data on month change or initial render
-  useEffect(() => {
-    const data = getMonthPayroll(selectedMonth);
-    setGlobalStatus(data.globalStatus);
+  const loadPayrollFromDatabase = async (monthStr: string) => {
+    setIsLoading(true);
+    try {
+      const res = await fetchPayrollsAction(monthStr);
+      setGlobalStatus(res.globalStatus);
 
-    const activeEmployees = getEmployees().filter((e) => e.status === "active");
-    const allTx = getRevenueTransactions();
+      const mappedRows: PayrollRow[] = res.rows.map((r) => ({
+        id: r.id,
+        employee_id: r.employee_id,
+        name: r.employee_name,
+        isManager: r.is_manager,
+        roleTitle: r.job_title,
+        baseSalary: BigInt(r.base_salary),
+        allowance: BigInt(r.allowance),
+        commPercent: r.commission_rate,
+        eligibleRevenue: BigInt(r.eligible_revenue),
+        commAmount: BigInt(r.commission_amount),
+        bonus: BigInt(r.bonus),
+        deduction: BigInt(r.deduction),
+        totalSalary: BigInt(r.total_salary),
+        status: r.status,
+        isPaid: r.is_paid,
+      }));
 
-    // Map stored payroll rows
-    const existingRowsMap = new Map<string, StoredPayrollRow>();
-    data.rows.forEach((r) => existingRowsMap.set(r.name.toLowerCase(), r));
-
-    // Build merged rows linking all active employees
-    const mergedRows: PayrollRow[] = activeEmployees.map((emp: StoredEmployee) => {
-      const normName = emp.fullName.toLowerCase();
-      const existing = existingRowsMap.get(normName);
-
-      // Compute revenue for this employee from revenue-store
-      const empRevenue = allTx
-        .filter((t: StoredTransaction) => t.status === "recorded" && (t.staffName.toLowerCase().includes(normName) || (t.username && t.username.toLowerCase() === emp.username.toLowerCase())))
-        .reduce((acc, t) => acc + BigInt(t.amount || "0"), 0n);
-
-      const baseSalary = BigInt(existing ? existing.baseSalary : emp.baseSalary || 6000000);
-      const allowance = BigInt(existing ? existing.allowance : emp.allowance || 500000);
-      const commPercent = existing ? existing.commPercent : emp.commissionRate || 10;
-      const eligibleRevenue = empRevenue > 0n ? empRevenue : BigInt(existing?.eligibleRevenue || "0");
-      const commAmount = calculateCommission(eligibleRevenue, commPercent);
-      const bonus = BigInt(existing?.bonus || "0");
-      const deduction = BigInt(existing?.deduction || "0");
-      const totalSalary = calculateTotalSalary(baseSalary, allowance, commAmount, bonus, deduction);
-
-      return {
-        id: existing?.id || emp.id,
-        name: emp.fullName,
-        isManager: emp.jobTitle.toLowerCase().includes("quản lý"),
-        roleTitle: emp.jobTitle || "Thợ cắt tóc",
-        baseSalary,
-        allowance,
-        commPercent,
-        eligibleRevenue,
-        commAmount,
-        bonus,
-        deduction,
-        totalSalary,
-        status: existing?.status || data.globalStatus,
-        isPaid: existing?.isPaid ?? (existing?.status === "paid" || data.globalStatus === "paid"),
-      };
-    });
-
-    setRows(mergedRows);
-  }, [selectedMonth]);
-
-  // Helper to persist updated rows back to storage
-  const persistPayroll = (updatedRows: PayrollRow[], newGlobalStatus: "draft" | "locked" | "published" | "paid") => {
-    setRows(updatedRows);
-    setGlobalStatus(newGlobalStatus);
-    const storedRows: StoredPayrollRow[] = updatedRows.map((r) => ({
-      ...r,
-      baseSalary: r.baseSalary.toString(),
-      allowance: r.allowance.toString(),
-      eligibleRevenue: r.eligibleRevenue.toString(),
-      commAmount: r.commAmount.toString(),
-      bonus: r.bonus.toString(),
-      deduction: r.deduction.toString(),
-      totalSalary: r.totalSalary.toString(),
-      status: r.status,
-      isPaid: r.isPaid,
-    }));
-    saveMonthPayroll({
-      month: selectedMonth,
-      globalStatus: newGlobalStatus,
-      updatedAt: new Date().toISOString(),
-      rows: storedRows,
-    });
+      setRows(mappedRows);
+    } catch (err) {
+      console.error("Lỗi tải bảng lương từ database:", err);
+    } finally {
+      setIsLoading(false);
+    }
   };
+
+  const loadHistoryFromDatabase = async () => {
+    try {
+      const history = await fetchPayrollHistoryAction();
+      setHistoryList(history);
+    } catch (err) {
+      console.error("Lỗi tải lịch sử bảng lương:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadPayrollFromDatabase(selectedMonth);
+    loadHistoryFromDatabase();
+  }, [selectedMonth]);
 
   const triggerToast = (msg: string) => {
     setToastMessage(msg);
@@ -146,91 +124,121 @@ export default function PayrollPage() {
   const totalPayrollPool = rows.reduce((acc, r) => acc + r.totalSalary, 0n);
   const totalShopRevenue = rows.reduce((acc, r) => acc + r.eligibleRevenue, 0n);
 
-  const handleGeneratePayroll = () => {
-    const updated = rows.map((r) => {
-      const comm = calculateCommission(r.eligibleRevenue, r.commPercent);
-      const total = calculateTotalSalary(r.baseSalary, r.allowance, comm, r.bonus, r.deduction);
-      return {
-        ...r,
-        commAmount: comm,
-        totalSalary: total,
-        status: "draft" as const,
-        isPaid: false,
-      };
-    });
-    persistPayroll(updated, "draft");
-    setShowCreateModal(false);
-    addAuditLog({
-      action: "PAYROLL_CREATED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã tạo mới bảng lương nháp cho ${selectedMonth}`,
-    });
-    triggerToast(`Đã tạo bảng lương nháp cho ${selectedMonth}!`);
-  };
+  const avgCommPercentDisplay =
+    totalShopRevenue > 0n
+      ? ((Number(totalCommission) / Number(totalShopRevenue)) * 100).toFixed(1) + "%"
+      : "0%";
 
-  const handleStatusChange = (newStatus: "locked" | "published" | "paid") => {
-    const updated = rows.map((r) => ({
-      ...r,
-      status: newStatus,
-      isPaid: newStatus === "paid" ? true : r.isPaid,
-    }));
-    persistPayroll(updated, newStatus);
+  const handleGeneratePayroll = async () => {
+    setIsLoading(true);
+    try {
+      await generatePayrollAction(selectedMonth);
+      await loadPayrollFromDatabase(selectedMonth);
+      await loadHistoryFromDatabase();
+      setShowCreateModal(false);
 
-    const statusText =
-      newStatus === "locked"
-        ? "Khóa bảng lương"
-        : newStatus === "published"
-        ? "Công bố bảng lương cho nhân viên"
-        : "Đánh dấu đã thanh toán toàn bộ";
-
-    if (newStatus === "published") {
-      addNotification({
-        title: "Công bố bảng lương mới",
-        message: `Bảng lương ${selectedMonth} đã được công bố! Tất cả nhân viên có thể vào tab Bảng lương để kiểm tra.`,
-        type: "payroll",
-        url: "/employee/payroll",
+      addAuditLog({
+        action: "PAYROLL_CREATED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã khởi tạo/tổng hợp bảng lương mới từ Database cho ${selectedMonth}`,
       });
-
-      if (typeof window !== "undefined" && "serviceWorker" in navigator && Notification.permission === "granted") {
-        navigator.serviceWorker.ready.then((reg) => {
-          reg.showNotification(`Toàn Anh Hair Salon - ${selectedMonth}`, {
-            body: `Bảng lương ${selectedMonth} đã chính thức được công bố! Hãy vào ứng dụng để xem chi tiết.`,
-            icon: "/Logo.png",
-            badge: "/Logo.png",
-          });
-        });
-      }
+      triggerToast(`Đã tính và lưu bảng lương ${selectedMonth} vào Database!`);
+    } catch (err: any) {
+      triggerToast(`Lỗi tạo bảng lương: ${err.message}`);
+    } finally {
+      setIsLoading(false);
     }
-
-    addAuditLog({
-      action: newStatus === "paid" ? "PAYROLL_PAID" : newStatus === "published" ? "PAYROLL_PUBLISHED" : "PAYROLL_LOCKED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã thực hiện: ${statusText} cho ${selectedMonth}`,
-    });
-    triggerToast(`Đã ${statusText} thành công!`);
   };
 
-  const toggleSingleEmployeePaid = (employeeId: string) => {
-    const updated = rows.map((r) => {
-      if (r.id === employeeId) {
-        const nextPaid = !r.isPaid;
-        return {
-          ...r,
-          isPaid: nextPaid,
-          status: nextPaid ? ("paid" as const) : globalStatus,
-        };
+  const handleStatusChange = async (newStatus: "locked" | "published" | "paid") => {
+    setIsLoading(true);
+    try {
+      await updatePayrollStatusAction(selectedMonth, newStatus);
+      await loadPayrollFromDatabase(selectedMonth);
+      await loadHistoryFromDatabase();
+
+      const statusText =
+        newStatus === "locked"
+          ? "Khóa bảng lương"
+          : newStatus === "published"
+          ? "Công bố bảng lương cho nhân viên"
+          : "Đánh dấu đã thanh toán toàn bộ";
+
+      if (newStatus === "published") {
+        addNotification({
+          title: "Công bố bảng lương mới",
+          message: `Bảng lương ${selectedMonth} đã được công bố! Tất cả nhân viên có thể vào tab Bảng lương để kiểm tra.`,
+          type: "payroll",
+          url: "/employee/payroll",
+        });
+
+        if (typeof window !== "undefined" && "serviceWorker" in navigator && Notification.permission === "granted") {
+          navigator.serviceWorker.ready.then((reg) => {
+            reg.showNotification(`Toàn Anh Hair Salon - ${selectedMonth}`, {
+              body: `Bảng lương ${selectedMonth} đã chính thức được công bố! Hãy vào ứng dụng để xem chi tiết.`,
+              icon: "/Logo.png",
+              badge: "/Logo.png",
+            });
+          });
+        }
       }
-      return r;
-    });
 
-    const allPaid = updated.every((r) => r.isPaid);
-    const newGlobal = allPaid ? "paid" : globalStatus;
+      addAuditLog({
+        action: newStatus === "paid" ? "PAYROLL_PAID" : newStatus === "published" ? "PAYROLL_PUBLISHED" : "PAYROLL_LOCKED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã thực hiện: ${statusText} cho ${selectedMonth} trong Database`,
+      });
+      triggerToast(`Đã ${statusText} thành công trong Database!`);
+    } catch (err: any) {
+      triggerToast(`Lỗi cập nhật trạng thái: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
-    persistPayroll(updated, newGlobal);
-    const emp = rows.find((r) => r.id === employeeId);
-    triggerToast(`Đã cập nhật trạng thái thanh toán cho ${emp?.name || "nhân viên"}!`);
+  const toggleSingleEmployeePaid = async (emp: PayrollRow) => {
+    setIsLoading(true);
+    try {
+      const nextPaid = !emp.isPaid;
+      await updateSinglePayrollPaidAction(selectedMonth, emp.employee_id, nextPaid);
+      await loadPayrollFromDatabase(selectedMonth);
+      await loadHistoryFromDatabase();
+
+      triggerToast(`Đã cập nhật trạng thái thanh toán cho ${emp.name} trong Database!`);
+    } catch (err: any) {
+      triggerToast(`Lỗi cập nhật thanh toán: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSaveSalarySettings = async () => {
+    setIsLoading(true);
+    try {
+      const payload = rows.map((r) => ({
+        employee_id: r.employee_id,
+        base_salary: Number(r.baseSalary),
+        allowance: Number(r.allowance),
+        commission_rate: r.commPercent,
+      }));
+
+      await updateSalarySettingsAction(payload);
+      await loadPayrollFromDatabase(selectedMonth);
+
+      addAuditLog({
+        action: "SALARY_SETTINGS_UPDATED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã cập nhật toàn bộ cấu hình lương nhân viên trong Database`,
+      });
+      triggerToast("Đã lưu toàn bộ cấu hình lương vào Database thành công!");
+    } catch (err: any) {
+      triggerToast(`Lỗi lưu cấu hình lương: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleExportExcel = () => {
@@ -256,8 +264,6 @@ export default function PayrollPage() {
     document.body.removeChild(link);
     triggerToast("Đã xuất file bảng lương CSV!");
   };
-
-  const currentStatus = rows[0]?.status || "published";
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-24 max-w-md mx-auto relative shadow-xl">
@@ -298,6 +304,7 @@ export default function PayrollPage() {
         <div className="flex items-center space-x-2">
           <div className="flex-1 bg-white border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3 py-2 text-xs font-semibold text-[#171717] flex justify-between items-center">
             <span>Kỳ lương: <strong className="text-[#741F2C]">{selectedMonth}</strong></span>
+            {isLoading && <Loader2 className="w-3.5 h-3.5 text-[#741F2C] animate-spin" />}
           </div>
           <button
             onClick={() => setShowMonthPickerModal(true)}
@@ -347,8 +354,8 @@ export default function PayrollPage() {
                   <Percent className="w-5 h-5" />
                 </div>
                 <div>
-                  <div className="text-[10px] text-[rgba(23,23,23,0.6)] font-medium">TB % doanh thu</div>
-                  <div className="text-sm font-bold text-[#171717]">9.2%</div>
+                  <div className="text-[10px] text-[rgba(23,23,23,0.6)] font-medium">TB % hoa hồng</div>
+                  <div className="text-sm font-bold text-[#171717]">{avgCommPercentDisplay}</div>
                 </div>
               </div>
             </div>
@@ -359,7 +366,8 @@ export default function PayrollPage() {
                 {globalStatus === "draft" && (
                   <button
                     onClick={() => handleStatusChange("locked")}
-                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-amber-600 text-amber-700"
+                    disabled={isLoading}
+                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-amber-600 text-amber-700 disabled:opacity-50"
                   >
                     <Lock className="w-3.5 h-3.5" />
                     <span>Khóa bảng lương</span>
@@ -368,7 +376,8 @@ export default function PayrollPage() {
                 {globalStatus === "locked" && (
                   <button
                     onClick={() => handleStatusChange("published")}
-                    className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1"
+                    disabled={isLoading}
+                    className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Công bố cho nhân viên</span>
@@ -377,7 +386,8 @@ export default function PayrollPage() {
                 {globalStatus === "published" && (
                   <button
                     onClick={() => handleStatusChange("paid")}
-                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-blue-600 text-blue-700 hover:bg-blue-50"
+                    disabled={isLoading}
+                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
                   >
                     <CreditCard className="w-3.5 h-3.5" />
                     <span>Thanh toán tất cả</span>
@@ -401,7 +411,8 @@ export default function PayrollPage() {
                 </button>
                 <button
                   onClick={() => setShowCreateModal(true)}
-                  className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1"
+                  disabled={isLoading}
+                  className="btn-primary text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 disabled:opacity-50"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Tạo mới</span>
@@ -427,7 +438,8 @@ export default function PayrollPage() {
 
                     <button
                       type="button"
-                      onClick={() => toggleSingleEmployeePaid(r.id)}
+                      onClick={() => toggleSingleEmployeePaid(r)}
+                      disabled={isLoading}
                       className={`px-2.5 py-1 rounded-full text-[11px] font-bold flex items-center space-x-1 transition-colors ${
                         r.isPaid
                           ? "bg-blue-100 text-blue-800 border border-blue-200"
@@ -506,8 +518,9 @@ export default function PayrollPage() {
                           <td className="py-3 px-2 text-center">
                             <button
                               type="button"
-                              onClick={() => toggleSingleEmployeePaid(r.id)}
-                              className="cursor-pointer focus:outline-none"
+                              onClick={() => toggleSingleEmployeePaid(r)}
+                              disabled={isLoading}
+                              className="cursor-pointer focus:outline-none disabled:opacity-50"
                             >
                               {r.isPaid ? (
                                 <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 whitespace-nowrap inline-flex items-center space-x-1">
@@ -557,51 +570,62 @@ export default function PayrollPage() {
             {/* Section: LỊCH SỬ BẢNG LƯƠNG */}
             <div className="space-y-2.5 pt-1">
               <h3 className="font-bold text-[#741F2C] text-xs tracking-wider uppercase">
-                LỊCH SỬ BẢNG LƯƠNG
+                LỊCH SỬ BẢNG LƯƠNG (DATABASE)
               </h3>
 
               <div className="space-y-2">
-                <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-3 shadow-sm flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-[#741F2C]">
-                      <Calendar className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-[#171717] text-sm">Tháng 5/2024</div>
-                      <div className="text-[11px] text-[rgba(23,23,23,0.5)]">Tạo lúc 08:30 20/05/2024 bởi Admin</div>
-                    </div>
+                {historyList.length === 0 ? (
+                  <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-4 text-center text-xs text-[rgba(23,23,23,0.5)]">
+                    Chưa có lịch sử bảng lương nào trong Database.
                   </div>
-                  <div className="flex items-center space-x-2 text-right">
-                    <div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-100 text-emerald-800 block mb-0.5">
-                        Đã công bố
-                      </span>
-                      <div className="font-bold text-sm text-[#171717]">{formatVND(52450000n)}</div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[rgba(23,23,23,0.4)]" />
-                  </div>
-                </div>
-
-                <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[12px] p-3 shadow-sm flex items-center justify-between">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center text-blue-800">
-                      <Calendar className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <div className="font-bold text-[#171717] text-sm">Tháng 4/2024</div>
-                      <div className="text-[11px] text-[rgba(23,23,23,0.5)]">Đã thanh toán lúc 09:15 05/05/2024</div>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 text-right">
-                    <div>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-100 text-blue-800 block mb-0.5">
-                        Đã thanh toán
-                      </span>
-                      <div className="font-bold text-sm text-[#171717]">{formatVND(48320000n)}</div>
-                    </div>
-                    <ChevronRight className="w-4 h-4 text-[rgba(23,23,23,0.4)]" />
-                  </div>
-                </div>
+                ) : (
+                  historyList.map((h) => (
+                    <button
+                      key={h.payrollMonthDate}
+                      onClick={() => setSelectedMonth(h.monthStr)}
+                      className={`w-full bg-white border rounded-[12px] p-3 shadow-sm flex items-center justify-between transition-colors text-left ${
+                        selectedMonth === h.monthStr ? "border-[#741F2C] bg-red-50/20" : "border-[rgba(23,23,23,0.12)] hover:border-gray-400"
+                      }`}
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center text-[#741F2C]">
+                          <Calendar className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-[#171717] text-sm">{h.monthStr}</div>
+                          <div className="text-[11px] text-[rgba(23,23,23,0.5)]">
+                            {h.employeeCount} nhân viên • {h.updatedAt ? new Date(h.updatedAt).toLocaleDateString("vi-VN") : "Database"}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2 text-right">
+                        <div>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-semibold block mb-0.5 ${
+                              h.globalStatus === "paid"
+                                ? "bg-blue-100 text-blue-800"
+                                : h.globalStatus === "published"
+                                ? "bg-emerald-100 text-emerald-800"
+                                : h.globalStatus === "locked"
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-gray-100 text-gray-700"
+                            }`}
+                          >
+                            {h.globalStatus === "paid"
+                              ? "Đã thanh toán"
+                              : h.globalStatus === "published"
+                              ? "Đã công bố"
+                              : h.globalStatus === "locked"
+                              ? "Đã khóa"
+                              : "Bản nháp"}
+                          </span>
+                          <div className="font-bold text-sm text-[#171717]">{formatVND(BigInt(h.totalPayroll))}</div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-[rgba(23,23,23,0.4)]" />
+                      </div>
+                    </button>
+                  ))
+                )}
               </div>
             </div>
           </>
@@ -609,7 +633,7 @@ export default function PayrollPage() {
           /* TAB 2: CÀI ĐẶT LƯƠNG */
           <div className="space-y-3">
             <h3 className="font-bold text-[#741F2C] text-xs tracking-wider uppercase">
-              CẤU HÌNH LƯƠNG & HOA HỒNG NHÂN VIÊN
+              CẤU HÌNH LƯƠNG & HOA HỒNG NHÂN VIÊN (DATABASE)
             </h3>
 
             <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm space-y-4">
@@ -632,7 +656,7 @@ export default function PayrollPage() {
                           updated[index].totalSalary = calculateTotalSalary(val, r.allowance, r.commAmount);
                           setRows(updated);
                         }}
-                        className="w-full bg-[#F7F3EC] border border-[rgba(23,23,23,0.14)] rounded-[8px] px-2.5 py-1.5 font-bold"
+                        className="w-full bg-[#F7F3EC] border border-[rgba(23,23,23,0.14)] rounded-[8px] px-2.5 py-1.5 font-bold text-[#171717]"
                       />
                     </div>
                     <div>
@@ -647,7 +671,7 @@ export default function PayrollPage() {
                           updated[index].totalSalary = calculateTotalSalary(r.baseSalary, val, r.commAmount);
                           setRows(updated);
                         }}
-                        className="w-full bg-[#F7F3EC] border border-[rgba(23,23,23,0.14)] rounded-[8px] px-2.5 py-1.5 font-bold"
+                        className="w-full bg-[#F7F3EC] border border-[rgba(23,23,23,0.14)] rounded-[8px] px-2.5 py-1.5 font-bold text-[#171717]"
                       />
                     </div>
                   </div>
@@ -655,10 +679,12 @@ export default function PayrollPage() {
               ))}
 
               <button
-                onClick={() => triggerToast("Đã lưu cấu hình lương thành công!")}
-                className="w-full bg-[#741F2C] text-white py-3 rounded-[10px] font-bold text-sm shadow-sm"
+                onClick={handleSaveSalarySettings}
+                disabled={isLoading}
+                className="w-full bg-[#741F2C] text-white py-3 rounded-[10px] font-bold text-sm shadow-sm disabled:opacity-50 flex items-center justify-center space-x-2"
               >
-                LƯU TOÀN BỘ CẤU HÌNH LƯƠNG
+                {isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                <span>LƯU TOÀN BỘ CẤU HÌNH LƯƠNG VÀO DATABASE</span>
               </button>
             </div>
           </div>
@@ -678,11 +704,11 @@ export default function PayrollPage() {
 
             <div className="flex items-center space-x-2 text-[#741F2C]">
               <Calculator className="w-6 h-6" />
-              <h3 className="font-bold text-lg text-[#171717]">Tạo bảng lương mới</h3>
+              <h3 className="font-bold text-lg text-[#171717]">Tạo bảng lương từ Database</h3>
             </div>
 
             <p className="text-xs text-[rgba(23,23,23,0.6)]">
-              Hệ thống sẽ tự động tổng hợp doanh thu của từng thợ trong <strong>{selectedMonth}</strong> và tính hoa hồng theo tỷ lệ cài đặt.
+              Hệ thống sẽ tự động tổng hợp doanh thu trong Database của từng thợ trong <strong>{selectedMonth}</strong> và tính hoa hồng theo cấu hình.
             </p>
 
             <div className="space-y-2 text-xs bg-[#F7F3EC] p-3 rounded-[10px]">
@@ -711,9 +737,11 @@ export default function PayrollPage() {
               <button
                 type="button"
                 onClick={handleGeneratePayroll}
-                className="flex-1 btn-primary py-2.5 text-xs font-bold rounded-[10px]"
+                disabled={isLoading}
+                className="flex-1 btn-primary py-2.5 text-xs font-bold rounded-[10px] flex items-center justify-center space-x-1"
               >
-                Xác nhận tạo
+                {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Xác nhận tạo</span>
               </button>
             </div>
           </div>
@@ -736,3 +764,4 @@ export default function PayrollPage() {
     </div>
   );
 }
+

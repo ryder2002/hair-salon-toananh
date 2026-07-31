@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Banknote, CreditCard, CheckCircle2, WifiOff } from "lucide-react";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
@@ -11,6 +11,8 @@ import { addAuditLog } from "@/lib/audit-log";
 import { getAuthSession } from "@/lib/auth";
 
 import { addRevenueTransaction } from "@/lib/revenue-store";
+import { createRevenueEntryAction } from "@/server/actions/revenue";
+import { getCurrentBusinessDateAction, isDayClosedAction } from "@/server/actions/day-closing";
 
 export default function RecordRevenuePage() {
   const router = useRouter();
@@ -21,6 +23,22 @@ export default function RecordRevenuePage() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [businessDate, setBusinessDate] = useState<string>("");
+  const [isClosed, setIsClosed] = useState(false);
+
+  useEffect(() => {
+    async function initDate() {
+      try {
+        const date = await getCurrentBusinessDateAction();
+        setBusinessDate(date);
+        const closed = await isDayClosedAction(date);
+        setIsClosed(closed);
+      } catch (e) {
+        setBusinessDate(getVietnamBusinessDate());
+      }
+    }
+    initDate();
+  }, []);
 
   const numericAmount = parseVNDInput(rawAmount);
 
@@ -31,11 +49,12 @@ export default function RecordRevenuePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (numericAmount <= 0n) return;
+    if (numericAmount <= 0n || isClosed) return;
     setErrorMsg("");
 
     const currentSession = getAuthSession();
     const actorName = currentSession?.fullName || "Nhân viên";
+    const targetDate = businessDate || getVietnamBusinessDate();
 
     // Call persistent revenue store with Anti-Spam check & real-time notification
     const res = addRevenueTransaction({
@@ -52,6 +71,22 @@ export default function RecordRevenuePage() {
     }
 
     setLoading(true);
+
+    // Also sync to Supabase Database & notify Admin profiles
+    try {
+      const idempotencyKey = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+      await createRevenueEntryAction({
+        amount: Number(numericAmount),
+        payment_method: paymentMethod,
+        service_name: serviceName || "Dịch vụ tóc",
+        note,
+        business_date: targetDate,
+        idempotency_key: idempotencyKey,
+      });
+    } catch (err) {
+      console.warn("Database revenue entry sync:", err);
+    }
+
     setTimeout(() => {
       setLoading(false);
       setSuccess(true);

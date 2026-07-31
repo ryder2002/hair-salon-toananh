@@ -5,13 +5,26 @@ import Link from "next/link";
 import { ArrowLeft, ShieldCheck, Search } from "lucide-react";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { getAuditLogs, AuditLogEntry } from "@/lib/audit-log";
+import { fetchAuditLogsAction } from "@/server/actions/audit";
 
 export default function AuditLogPage() {
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
-    setLogs(getAuditLogs());
+    async function loadLogs() {
+      try {
+        const dbLogs = await fetchAuditLogsAction();
+        if (dbLogs && dbLogs.length > 0) {
+          setLogs(dbLogs as AuditLogEntry[]);
+          return;
+        }
+      } catch (err) {
+        console.warn("DB audit log fetch error:", err);
+      }
+      setLogs(getAuditLogs());
+    }
+    loadLogs();
   }, []);
 
   const filteredLogs = logs.filter((l) =>

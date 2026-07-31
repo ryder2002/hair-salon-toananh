@@ -11,6 +11,9 @@ import { getAuthSession } from "@/lib/auth";
 import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
+import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
+import { fetchRevenuesAction } from "@/server/actions/revenue";
+
 export default function EmployeeDashboardPage() {
   const [session, setSession] = useState<any>(null);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
@@ -21,18 +24,64 @@ export default function EmployeeDashboardPage() {
   const [cutCount, setCutCount] = useState<number>(0);
   const [businessDate, setBusinessDate] = useState<string>("");
 
-  const loadEmployeeData = () => {
+  const loadEmployeeData = async () => {
     const activeSession = getAuthSession();
     setSession(activeSession);
-    const currentDate = getVietnamBusinessDate();
+
+    // Fetch dynamic business date from DB (advances automatically when Admin closes day)
+    let currentDate = getVietnamBusinessDate();
+    try {
+      currentDate = await getCurrentBusinessDateAction();
+    } catch (e) {}
     setBusinessDate(currentDate);
 
     const empName = activeSession?.fullName || "";
     const empUsername = activeSession?.username || "";
 
-    const allTx = getRevenueTransactions();
+    // 1. Fetch DB revenues
+    try {
+      const dbEntries = await fetchRevenuesAction(currentDate);
+      if (dbEntries && dbEntries.length > 0) {
+        let cCash = 0n;
+        let cTransfer = 0n;
+        let cMonth = 0n;
+        let count = 0;
 
-    // Filter transactions for this employee
+        const formattedList: TransactionItem[] = [];
+        dbEntries.forEach((e: any) => {
+          if (e.status === "voided") return;
+          const amt = BigInt(e.amount || 0);
+          cMonth += amt;
+          if (e.payment_method === "cash") cCash += amt;
+          if (e.payment_method === "bank_transfer") cTransfer += amt;
+          count += 1;
+
+          formattedList.push({
+            id: e.id,
+            staffName: e.profiles?.full_name || empName,
+            avatarType: "scissors",
+            serviceName: e.service_name || "Dịch vụ tóc",
+            amount: amt,
+            paymentMethod: e.payment_method,
+            time: new Date(e.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+            status: e.status,
+          });
+        });
+
+        setTransactions(formattedList);
+        setTodayCash(cCash);
+        setTodayTransfer(cTransfer);
+        setTodayTotal(cCash + cTransfer);
+        setMonthTotal(cMonth);
+        setCutCount(count);
+        return;
+      }
+    } catch (err) {
+      console.warn("DB employee revenue fetch fallback:", err);
+    }
+
+    // 2. Local store fallback
+    const allTx = getRevenueTransactions();
     const empTx = allTx.filter((t: StoredTransaction) => {
       if (t.status === "voided") return false;
       const tStaff = t.staffName.toLowerCase();
@@ -81,7 +130,20 @@ export default function EmployeeDashboardPage() {
     const unsubscribe = subscribeRevenueTransactions(() => {
       loadEmployeeData();
     });
-    return () => unsubscribe();
+
+    // Listen to BroadcastChannel for real-time Day Closing updates
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("barbershop_day_closing_channel");
+      bc.onmessage = () => {
+        loadEmployeeData();
+      };
+    } catch (e) {}
+
+    return () => {
+      unsubscribe();
+      if (bc) bc.close();
+    };
   }, []);
 
   const empDisplayName = session?.fullName ? session.fullName.split(" ").slice(-2).join(" ") : "bạn";

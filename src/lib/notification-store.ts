@@ -51,6 +51,39 @@ export function addNotification(data: {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
       window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: updated }));
+
+      // 1. Multi-tab Web Push Broadcast
+      try {
+        const bc = new BroadcastChannel("barbershop_webpush_channel");
+        bc.postMessage({
+          title: data.title,
+          message: data.message,
+          url: data.url || "/admin/revenue",
+        });
+        bc.close();
+      } catch (e) {}
+
+      // 2. Trigger instant OS Web Push Notification if permission granted
+      if ("Notification" in window && Notification.permission === "granted") {
+        const options = {
+          body: data.message,
+          icon: "/Logo.png",
+          badge: "/Logo.png",
+          data: { url: data.url || "/admin/revenue" },
+        };
+
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready
+            .then((reg) => {
+              reg.showNotification(data.title, options);
+            })
+            .catch(() => {
+              try { new Notification(data.title, options); } catch (e) {}
+            });
+        } else {
+          try { new Notification(data.title, options); } catch (e) {}
+        }
+      }
     } catch (err) {
       console.error("Failed to save notification:", err);
     }

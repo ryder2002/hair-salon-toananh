@@ -9,9 +9,11 @@ import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
 import { addAuditLog } from "@/lib/audit-log";
-import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
-
+import { fetchRevenuesAction, voidRevenueEntryAction } from "@/server/actions/revenue";
+import { closeDayAction, reopenDayAction, getCurrentBusinessDateAction, isDayClosedAction } from "@/server/actions/day-closing";
+import { logAuditAction } from "@/server/actions/audit";
 import { getRevenueTransactions, subscribeRevenueTransactions, voidRevenueTransaction, StoredTransaction } from "@/lib/revenue-store";
+import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
 
 export default function RevenueManagementPage() {
   const [activeFilter, setActiveFilter] = useState("today");
@@ -22,8 +24,37 @@ export default function RevenueManagementPage() {
   const [voidReason, setVoidReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [currentBusinessDate, setCurrentBusinessDate] = useState("");
 
-  const loadLatestTransactions = () => {
+  const loadLatestTransactions = async () => {
+    try {
+      const date = await getCurrentBusinessDateAction();
+      setCurrentBusinessDate(date);
+
+      const dbClosed = await isDayClosedAction(date);
+      setIsClosed(dbClosed);
+
+      // Fetch from Supabase DB
+      const dbEntries = await fetchRevenuesAction(date);
+      if (dbEntries && dbEntries.length > 0) {
+        const formatted: TransactionItem[] = dbEntries.map((e: any) => ({
+          id: e.id,
+          staffName: e.profiles?.full_name || "Nhân viên",
+          avatarType: "scissors",
+          serviceName: e.service_name || "Dịch vụ tóc",
+          amount: BigInt(e.amount || 0),
+          paymentMethod: e.payment_method,
+          time: new Date(e.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+          status: e.status,
+        }));
+        setTransactions(formatted);
+        return;
+      }
+    } catch (err) {
+      console.warn("DB revenue fetch fallback:", err);
+    }
+
+    // Fallback to local store
     const rawList = getRevenueTransactions();
     const formatted: TransactionItem[] = rawList.map((t: StoredTransaction) => ({
       id: t.id,
@@ -70,10 +101,17 @@ export default function RevenueManagementPage() {
     .reduce((acc, t) => acc + BigInt(t.amount), 0n);
   const totalRevenue = cashTotal + bankTotal;
 
-  const handleVoidTx = () => {
+  const handleVoidTx = async () => {
     if (!selectedTx || !voidReason) return;
 
-    // Void transaction in store
+    // Void in DB
+    try {
+      await voidRevenueEntryAction(selectedTx.id, voidReason);
+    } catch (err) {
+      console.warn("Void DB action warning:", err);
+    }
+
+    // Void transaction in local store
     voidRevenueTransaction(selectedTx.id);
 
     addAuditLog({
@@ -82,22 +120,55 @@ export default function RevenueManagementPage() {
       actorRole: "admin",
       details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
     });
+    await logAuditAction({
+      action: "REVENUE_VOIDED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
+    });
+
     setShowVoidModal(false);
     setSelectedTx(null);
     setVoidReason("");
     triggerToast("Đã hủy giao dịch thành công!");
+    loadLatestTransactions();
   };
 
-  const handleConfirmCloseDay = () => {
-    setDayClosingState(true);
-    addAuditLog({
-      action: "DAY_CLOSED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã chốt ngày doanh thu hôm nay (Tổng doanh thu: ${formatVND(totalRevenue)}, ${recordedTxs.length} giao dịch)`,
+  const handleConfirmCloseDay = async () => {
+    const targetDate = currentBusinessDate || new Date().toISOString().split("T")[0];
+
+    // Call closeDayAction in Supabase DB
+    const res = await closeDayAction({
+      businessDate: targetDate,
+      cashTotal: Number(cashTotal),
+      bankTotal: Number(bankTotal),
+      revenueTotal: Number(totalRevenue),
+      transactionCount: recordedTxs.length,
     });
-    setShowCloseModal(false);
-    triggerToast("Đã chốt ngày doanh thu thành công!");
+
+    if (res.success) {
+      setDayClosingState(true);
+
+      // Broadcast to all open tabs (especially employee tabs) so they switch to next business day
+      try {
+        const bc = new BroadcastChannel("barbershop_day_closing_channel");
+        bc.postMessage({ type: "DAY_CLOSED", businessDate: targetDate });
+        bc.close();
+      } catch (e) {}
+
+      addAuditLog({
+        action: "DAY_CLOSED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã chốt ngày ${targetDate} (Tổng: ${formatVND(totalRevenue)}, ${recordedTxs.length} giao dịch)`,
+      });
+
+      setShowCloseModal(false);
+      setIsClosed(true);
+      triggerToast(`Đã chốt thành công ngày ${targetDate}! Nhân viên sẽ chuyển sang ngày mới.`);
+    } else {
+      triggerToast("Lỗi chốt ngày: " + (res.error || ""));
+    }
   };
 
   return (

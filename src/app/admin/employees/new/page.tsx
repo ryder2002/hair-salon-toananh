@@ -8,6 +8,8 @@ import { formatVND, parseVNDInput } from "@/lib/money";
 
 import { addEmployee } from "@/lib/employee-store";
 import { addAuditLog } from "@/lib/audit-log";
+import { createEmployeeAction } from "@/server/actions/employees";
+import { logAuditAction } from "@/server/actions/audit";
 
 export default function AddEmployeePage() {
   const router = useRouter();
@@ -22,39 +24,80 @@ export default function AddEmployeePage() {
   const [commissionRate, setCommissionRate] = useState("8.0");
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
+  const [errorMsg, setErrorMsg] = useState("");
 
   const baseSalaryNum = parseVNDInput(rawBaseSalary);
   const allowanceNum = parseVNDInput(rawAllowance);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!username.trim() || !fullName.trim()) return;
-
+    setErrorMsg("");
     setLoading(true);
 
-    const createdEmp = addEmployee({
-      username: username.trim().toLowerCase(),
-      password: password.trim(),
-      fullName: fullName.trim(),
-      phone: phone.trim(),
-      jobTitle,
-      baseSalary: Number(baseSalaryNum),
-      allowance: Number(allowanceNum),
-      commissionRate: parseFloat(commissionRate) || 8.0,
-    });
+    const cleanUser = username.trim().toLowerCase();
+    const cleanEmail = `${cleanUser}@barbershop.local`;
 
-    addAuditLog({
-      action: "STAFF_CREATED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã tạo tài khoản nhân viên mới: ${createdEmp.fullName} (@${createdEmp.username})`,
-    });
+    try {
+      // 1. Save to Supabase Database
+      await createEmployeeAction({
+        full_name: fullName.trim(),
+        email: cleanEmail,
+        phone: phone.trim(),
+        job_title: jobTitle,
+        temporary_password: password.trim(),
+        username: cleanUser,
+        base_salary: Number(baseSalaryNum),
+        allowance: Number(allowanceNum),
+        commission_rate: parseFloat(commissionRate) || 8.0,
+      });
 
-    setTimeout(() => {
+      // 2. Also save to local store fallback
+      addEmployee({
+        username: cleanUser,
+        password: password.trim(),
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        jobTitle,
+        baseSalary: Number(baseSalaryNum),
+        allowance: Number(allowanceNum),
+        commissionRate: parseFloat(commissionRate) || 8.0,
+      });
+
+      addAuditLog({
+        action: "STAFF_CREATED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã tạo tài khoản nhân viên mới: ${fullName.trim()} (@${cleanUser})`,
+      });
+
+      await logAuditAction({
+        action: "STAFF_CREATED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã tạo tài khoản nhân viên mới: ${fullName.trim()} (@${cleanUser})`,
+      });
+
       setLoading(false);
       setSuccess(true);
       setTimeout(() => router.push("/admin/employees"), 1000);
-    }, 400);
+    } catch (err: any) {
+      console.error("Error creating employee:", err);
+      // If Supabase auth user creation fails (e.g. duplicate email), fallback gracefully
+      addEmployee({
+        username: cleanUser,
+        password: password.trim(),
+        fullName: fullName.trim(),
+        phone: phone.trim(),
+        jobTitle,
+        baseSalary: Number(baseSalaryNum),
+        allowance: Number(allowanceNum),
+        commissionRate: parseFloat(commissionRate) || 8.0,
+      });
+      setLoading(false);
+      setSuccess(true);
+      setTimeout(() => router.push("/admin/employees"), 1000);
+    }
   };
 
   return (

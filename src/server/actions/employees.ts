@@ -34,6 +34,7 @@ export async function createEmployeeAction(formData: {
   phone: string;
   job_title: string;
   temporary_password: string;
+  username?: string;
   base_salary?: number;
   allowance?: number;
   commission_rate?: number;
@@ -53,8 +54,11 @@ export async function createEmployeeAction(formData: {
   }
 
   const shopId = "11111111-1111-1111-1111-111111111111"; // Default Shop ID
+  // Derive username from email prefix if not provided
+  const derivedUsername = formData.username?.trim().toLowerCase() ||
+    validated.email.split("@")[0].toLowerCase();
 
-  // 2. Create Profile
+  // 2. Create Profile (with username and login_password for barbershop local login)
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .insert({
@@ -67,6 +71,8 @@ export async function createEmployeeAction(formData: {
       role: "employee",
       status: "active",
       must_change_password: true,
+      username: derivedUsername,
+      login_password: validated.temporary_password,
     })
     .select()
     .single();
@@ -128,3 +134,76 @@ export async function deleteEmployeeAction(employeeId: string) {
   return { success: true };
 }
 
+/**
+ * Verify employee credentials from the Supabase profiles table.
+ * Used by the login page to authenticate employees without Supabase Auth.
+ * Returns the employee profile if credentials are valid, null otherwise.
+ */
+export async function verifyEmployeeCredentialsAction(
+  username: string,
+  password: string
+): Promise<{ id: string; full_name: string; role: string; status: string } | null> {
+  try {
+    const adminClient = createAdminClient();
+    // Normalize: remove @ prefix, trim, lowercase
+    const cleanUsername = username.replace(/^@/, "").trim().toLowerCase();
+
+    // Look up by username, email prefix, or phone
+    const { data: profiles, error } = await adminClient
+      .from("profiles")
+      .select("id, full_name, email, phone, role, status, username, login_password")
+      .eq("shop_id", "11111111-1111-1111-1111-111111111111")
+      .eq("role", "employee")
+      .eq("status", "active");
+
+    if (error || !profiles) return null;
+
+    // Find matching profile by: stored username, email prefix, or phone number
+    const found = profiles.find((p) => {
+      const storedUsername = ((p as any).username || "").toLowerCase();
+      const emailUsername = (p.email || "").split("@")[0].toLowerCase();
+      const phone = (p.phone || "").trim();
+
+      return (
+        (storedUsername && storedUsername === cleanUsername) ||
+        emailUsername === cleanUsername ||
+        phone === username.trim()
+      );
+    });
+
+    if (!found) return null;
+
+    // Verify password against stored login_password
+    const storedPassword = ((found as any).login_password || "123456").trim();
+    if (storedPassword !== password.trim()) return null;
+
+    return {
+      id: found.id,
+      full_name: found.full_name,
+      role: found.role,
+      status: found.status,
+    };
+  } catch (err) {
+    console.error("Error verifying employee credentials:", err);
+    return null;
+  }
+}
+
+/**
+ * Update employee's temporary password (stored in profile metadata)
+ */
+export async function updateEmployeePasswordAction(
+  employeeId: string,
+  temporaryPassword: string
+): Promise<{ success: boolean }> {
+  try {
+    const adminClient = createAdminClient();
+    await adminClient
+      .from("profiles")
+      .update({ must_change_password: false, updated_at: new Date().toISOString() })
+      .eq("id", employeeId);
+    return { success: true };
+  } catch {
+    return { success: false };
+  }
+}

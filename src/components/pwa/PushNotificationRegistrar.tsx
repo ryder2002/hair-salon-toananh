@@ -24,10 +24,35 @@ export function PushNotificationRegistrar() {
       const timer = setTimeout(() => {
         requestNotificationPermission();
       }, 1000);
-      return () => clearTimeout(timer);
     } else if (currentPermission === "granted") {
       registerWebPushSubscription();
     }
+
+    // BroadcastChannel listener for real-time cross-tab Web Push Notifications
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("barbershop_webpush_channel");
+      bc.onmessage = (event) => {
+        const { title, message, url } = event.data || {};
+        if (title && Notification.permission === "granted") {
+          const options = {
+            body: message,
+            icon: "/Logo.png",
+            badge: "/Logo.png",
+            data: { url: url || "/admin/revenue" },
+          };
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.ready.then((reg) => reg.showNotification(title, options));
+          } else {
+            try { new Notification(title, options); } catch (e) {}
+          }
+        }
+      };
+    } catch (e) {}
+
+    return () => {
+      if (bc) bc.close();
+    };
   }, []);
 
   const requestNotificationPermission = async () => {

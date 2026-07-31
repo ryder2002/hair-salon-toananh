@@ -18,20 +18,47 @@ import {
   markAllNotificationsAsRead,
   AppNotification,
 } from "@/lib/notification-store";
+import { fetchNotificationsAction, markAllNotificationsReadAction } from "@/server/actions/notifications";
 
 export default function NotificationsPage() {
   const [items, setItems] = useState<AppNotification[]>([]);
 
-  useEffect(() => {
+  const loadNotifications = async () => {
+    try {
+      const dbNotifs = await fetchNotificationsAction();
+      if (dbNotifs && dbNotifs.length > 0) {
+        const formatted: AppNotification[] = dbNotifs.map((n: any) => ({
+          id: n.id,
+          title: n.title,
+          message: n.message,
+          type: n.type || "revenue",
+          timestamp: new Date(n.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
+          isRead: !!n.read_at,
+          url: n.data?.url,
+        }));
+        setItems(formatted);
+        return;
+      }
+    } catch (err) {
+      console.warn("DB fetch notifications error:", err);
+    }
     setItems(getNotifications());
+  };
+
+  useEffect(() => {
+    loadNotifications();
     const unsubscribe = subscribeNotifications((updated) => {
-      setItems(updated);
+      loadNotifications();
     });
     return () => unsubscribe();
   }, []);
 
-  const markAllRead = () => {
+  const markAllRead = async () => {
+    try {
+      await markAllNotificationsReadAction();
+    } catch (e) {}
     markAllNotificationsAsRead();
+    loadNotifications();
   };
 
   const renderIcon = (type: string) => {

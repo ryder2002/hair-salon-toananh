@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { Lock, User, Eye, EyeOff, AlertCircle } from "lucide-react";
 import { setAuthSession } from "@/lib/auth";
 import { addAuditLog } from "@/lib/audit-log";
-import { verifyEmployeeLogin } from "@/lib/employee-store";
+import { verifyEmployeeCredentialsAction } from "@/server/actions/employees";
+import { logAuditAction } from "@/server/actions/audit";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -29,9 +30,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    setTimeout(() => {
-      setLoading(false);
-
+    try {
       // 1. Admin verification (Seed Accounts)
       const isAdminSeed1 = cleanUsername === "dinhcongnhat" && cleanPassword === "10122002";
       const isAdminSeed2 = cleanUsername === "admin" && cleanPassword === "admin123";
@@ -50,31 +49,50 @@ export default function LoginPage() {
           actorRole: "admin",
           details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
         });
+        await logAuditAction({
+          action: "USER_LOGIN",
+          actorName: adminName,
+          actorRole: "admin",
+          details: "Đã đăng nhập thành công vào hệ thống quản trị (Admin)",
+        });
+        setLoading(false);
         router.push("/admin");
         return;
       }
 
-      // 2. Dynamic Employee verification from store
-      const empAccount = verifyEmployeeLogin(cleanUsername, cleanPassword);
+      // 2. Dynamic Employee verification from Supabase Database
+      const empAccount = await verifyEmployeeCredentialsAction(cleanUsername, cleanPassword);
       if (empAccount) {
         setAuthSession({
-          username: empAccount.username,
-          fullName: empAccount.fullName,
+          username: cleanUsername,
+          fullName: empAccount.full_name,
           role: "employee",
           token: "employee_token_" + Date.now(),
         });
         addAuditLog({
           action: "USER_LOGIN",
-          actorName: empAccount.fullName,
+          actorName: empAccount.full_name,
           actorRole: "employee",
           details: `Đã đăng nhập thành công vào giao diện nhân viên`,
         });
+        await logAuditAction({
+          action: "USER_LOGIN",
+          actorName: empAccount.full_name,
+          actorRole: "employee",
+          details: `Đã đăng nhập thành công vào giao diện nhân viên`,
+        });
+        setLoading(false);
         router.push("/employee");
         return;
       }
 
       setError("Tên đăng nhập hoặc mật khẩu không đúng. Vui lòng thử lại!");
-    }, 400);
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Đã xảy ra lỗi khi kết nối hệ thống. Vui lòng thử lại!");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

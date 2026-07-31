@@ -9,8 +9,10 @@ import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
 import { StaffRevenueProgressList, StaffRevenueItem } from "@/components/ui/StaffRevenueProgressList";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { DayClosingCard } from "@/components/ui/DayClosingCard";
-import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
+import { fetchRevenuesAction } from "@/server/actions/revenue";
+import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
 import { getVietnamBusinessDate } from "@/lib/dates";
+import { getRevenueTransactions, subscribeRevenueTransactions } from "@/lib/revenue-store";
 
 export default function AdminDashboardPage() {
   const [totalRevenue, setTotalRevenue] = useState<bigint>(0n);
@@ -21,22 +23,39 @@ export default function AdminDashboardPage() {
   const [recentTransactions, setRecentTransactions] = useState<TransactionItem[]>([]);
   const [businessDate, setBusinessDate] = useState<string>("");
 
-  const loadDashboardData = () => {
-    setBusinessDate(getVietnamBusinessDate());
-    const rawList = getRevenueTransactions();
+  const loadDashboardData = async () => {
+    let dateStr = getVietnamBusinessDate();
+    try {
+      dateStr = await getCurrentBusinessDateAction();
+    } catch (e) {}
+    setBusinessDate(dateStr);
 
-    const recorded = rawList.filter((t) => t.status === "recorded");
+    let recorded: any[] = [];
+    try {
+      const dbData = await fetchRevenuesAction(dateStr);
+      if (dbData && dbData.length > 0) {
+        recorded = dbData.filter((t: any) => t.status === "recorded");
+      }
+    } catch (err) {
+      console.warn("DB fetch error, fallback to local:", err);
+    }
+
+    if (recorded.length === 0) {
+      const rawList = getRevenueTransactions();
+      recorded = rawList.filter((t) => t.status === "recorded");
+    }
 
     let cash = 0n;
     let bank = 0n;
     const staffMap: Record<string, { name: string; avatarType: any; revenue: bigint }> = {};
 
-    const formattedTxs: TransactionItem[] = recorded.map((t) => {
+    const formattedTxs: TransactionItem[] = recorded.map((t: any) => {
       const amt = BigInt(t.amount || 0);
-      if (t.paymentMethod === "cash") cash += amt;
-      if (t.paymentMethod === "bank_transfer") bank += amt;
+      const pm = t.payment_method || t.paymentMethod;
+      if (pm === "cash") cash += amt;
+      if (pm === "bank_transfer") bank += amt;
 
-      const sName = t.staffName || "Nhân viên";
+      const sName = t.profiles?.full_name || t.staffName || "Nhân viên";
       if (!staffMap[sName]) {
         staffMap[sName] = { name: sName, avatarType: t.avatarType || "scissors", revenue: 0n };
       }
@@ -44,12 +63,14 @@ export default function AdminDashboardPage() {
 
       return {
         id: t.id,
-        staffName: t.staffName,
+        staffName: sName,
         avatarType: t.avatarType || "scissors",
-        serviceName: t.serviceName,
+        serviceName: t.service_name || t.serviceName || "Dịch vụ tóc",
         amount: amt,
-        paymentMethod: t.paymentMethod,
-        time: t.time,
+        paymentMethod: pm,
+        time: t.performed_at
+          ? new Date(t.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })
+          : t.time,
         status: t.status,
       };
     });

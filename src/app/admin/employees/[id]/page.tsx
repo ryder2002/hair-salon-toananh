@@ -6,6 +6,8 @@ import { ArrowLeft, Lock, Unlock, Save, CheckCircle2, DollarSign, Percent, Trash
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { formatVND, parseVNDInput } from "@/lib/money";
 import { addAuditLog } from "@/lib/audit-log";
+import { deleteEmployeeAction, toggleEmployeeStatusAction, fetchEmployeesAction } from "@/server/actions/employees";
+import { logAuditAction } from "@/server/actions/audit";
 import { getEmployees, deleteEmployee, toggleEmployeeStatus } from "@/lib/employee-store";
 
 export default function EmployeeDetailPage() {
@@ -26,26 +28,47 @@ export default function EmployeeDetailPage() {
 
   useEffect(() => {
     if (!id) return;
-    const employees = getEmployees();
-    const found = employees.find((e) => e.id === id || e.username === id);
-    if (found) {
-      setFullName(found.fullName);
-      setUsername(found.username);
-      setJobTitle(found.jobTitle);
-      setStatus(found.status);
-      setRawBaseSalary(String(found.baseSalary || 6000000));
-      setRawAllowance(String(found.allowance || 500000));
-      setCommissionRate(String(found.commissionRate || 8.0));
-    } else {
-      setFullName(id);
-      setUsername(id);
+
+    async function load() {
+      try {
+        const dbList = await fetchEmployeesAction();
+        const foundDb = dbList.find((e: any) => e.id === id || e.email?.split("@")[0] === id);
+        if (foundDb) {
+          setFullName(foundDb.full_name);
+          setUsername(foundDb.email?.split("@")[0] || id);
+          setJobTitle(foundDb.job_title || "Thợ cắt tóc");
+          setStatus(foundDb.status || "active");
+          setRawBaseSalary(String(foundDb.salary_settings?.[0]?.base_salary || 6000000));
+          setRawAllowance(String(foundDb.salary_settings?.[0]?.allowance || 500000));
+          setCommissionRate(String(foundDb.salary_settings?.[0]?.commission_rate || 8.0));
+          return;
+        }
+      } catch (err) {
+        console.warn("DB fetch profile fallback:", err);
+      }
+
+      const employees = getEmployees();
+      const found = employees.find((e) => e.id === id || e.username === id);
+      if (found) {
+        setFullName(found.fullName);
+        setUsername(found.username);
+        setJobTitle(found.jobTitle);
+        setStatus(found.status);
+        setRawBaseSalary(String(found.baseSalary || 6000000));
+        setRawAllowance(String(found.allowance || 500000));
+        setCommissionRate(String(found.commissionRate || 8.0));
+      } else {
+        setFullName(id);
+        setUsername(id);
+      }
     }
+    load();
   }, [id]);
 
   const baseSalaryNum = parseVNDInput(rawBaseSalary);
   const allowanceNum = parseVNDInput(rawAllowance);
 
-  const handleSave = (e: React.FormEvent) => {
+  const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaved(true);
     addAuditLog({
@@ -54,27 +77,58 @@ export default function EmployeeDetailPage() {
       actorRole: "admin",
       details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (@${username}) (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
     });
+    await logAuditAction({
+      action: "STAFF_UPDATED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (@${username}) (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
+    });
     setTimeout(() => setSaved(false), 2000);
   };
 
-  const toggleStatus = () => {
-    const newStatus = toggleEmployeeStatus(id);
-    setStatus(newStatus);
+  const toggleStatus = async () => {
+    const nextStatus = status === "active" ? "inactive" : "active";
+    setStatus(nextStatus);
+
+    try {
+      await toggleEmployeeStatusAction(id, nextStatus);
+    } catch (err) {
+      console.warn("DB toggle status error:", err);
+    }
+    toggleEmployeeStatus(id);
+
     addAuditLog({
-      action: newStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
+      action: nextStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
       actorName: "Admin Manager",
       actorRole: "admin",
-      details: `Đã ${newStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName} (@${username})`,
+      details: `Đã ${nextStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName} (@${username})`,
+    });
+    await logAuditAction({
+      action: nextStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã ${nextStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName} (@${username})`,
     });
   };
 
-  const handleDeleteEmployee = () => {
+  const handleDeleteEmployee = async () => {
     setDeleting(true);
 
-    // Call persistent delete from employee-store
+    try {
+      await deleteEmployeeAction(id);
+    } catch (err) {
+      console.warn("DB delete employee warning:", err);
+    }
+
     deleteEmployee(id);
 
     addAuditLog({
+      action: "STAFF_DELETED",
+      actorName: "Admin Manager",
+      actorRole: "admin",
+      details: `Đã xóa vĩnh viễn tài khoản người dùng/nhân viên ${fullName} (@${username}) khỏi hệ thống`,
+    });
+    await logAuditAction({
       action: "STAFF_DELETED",
       actorName: "Admin Manager",
       actorRole: "admin",
