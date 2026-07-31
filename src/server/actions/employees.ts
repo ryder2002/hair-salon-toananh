@@ -165,11 +165,10 @@ export async function verifyEmployeeCredentialsAction(
     const cleanQuery = userQuery.replace(/^@/, "").trim().toLowerCase();
     const cleanPassword = passwordQuery.trim();
 
-    // 1. Query active employee profiles in shop
+    // 1. Query active employee profiles across all shops
     const { data: profiles, error } = await adminClient
       .from("profiles")
       .select("id, full_name, email, phone, role, status")
-      .eq("shop_id", "11111111-1111-1111-1111-111111111111")
       .eq("role", "employee")
       .eq("status", "active");
 

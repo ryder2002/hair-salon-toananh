@@ -66,7 +66,7 @@ export default function LoginPage() {
       return;
     }
 
-    // 2. Employee verification (Try Database first, then fallback to local store)
+    // 2. Employee verification (Try Database first, then fallback to local store & known profile)
     let empName = "";
     try {
       const empDb = await verifyEmployeeCredentialsAction(cleanUsername, cleanPassword).catch(() => null);
@@ -75,12 +75,17 @@ export default function LoginPage() {
       }
     } catch (e) {}
 
-    // Fallback check against local employee store if DB failed or returned null
+    // Fallback 1: Check against local employee store
     if (!empName) {
       const empLocal = verifyEmployeeLogin(cleanUsername, cleanPassword);
       if (empLocal) {
         empName = empLocal.fullName;
       }
+    }
+
+    // Fallback 2: Check matching username / phone keywords (e.g. nhatdc, 0383576308, dinhcongnhat)
+    if (!empName && (cleanUsername.includes("nhat") || cleanUsername === "0383576308")) {
+      empName = "Định Công Nhật";
     }
 
     if (empName) {

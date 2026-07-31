@@ -35,9 +35,15 @@ self.addEventListener("activate", function (event) {
   self.clients.claim();
 });
 
-// 3. Fetch Event (Essential for Chrome PWA Desktop Installability)
+// 3. Fetch Event (Essential for PWA Installability & Offline Cache)
 self.addEventListener("fetch", function (event) {
   if (event.request.method !== "GET") return;
+
+  const url = new URL(event.request.url);
+  // Do not intercept API, Server Actions, or Next.js internal data requests
+  if (url.pathname.startsWith("/api") || url.pathname.startsWith("/_next/data")) {
+    return;
+  }
 
   event.respondWith(
     fetch(event.request)
@@ -56,8 +62,9 @@ self.addEventListener("fetch", function (event) {
             return cachedResponse;
           }
           if (event.request.mode === "navigate") {
-            return caches.match("/");
+            return caches.match("/") || new Response("Offline", { status: 503, headers: { "Content-Type": "text/html" } });
           }
+          return new Response("", { status: 504, statusText: "Gateway Timeout" });
         });
       })
   );

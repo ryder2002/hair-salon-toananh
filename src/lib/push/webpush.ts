@@ -17,19 +17,28 @@ export async function registerWebPushSubscription(): Promise<PushSubscription | 
       return null;
     }
 
-    const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "BEl62iUYgUivxIkv69yViEuiBIa-m9GYv50D15bS-16m_k8w6Q01";
+    const publicVapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+    if (!publicVapidKey) {
+      // VAPID key not set in environment, return null gracefully
+      return null;
+    }
 
     let subscription = await registration.pushManager.getSubscription();
     if (!subscription) {
-      subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicVapidKey) as unknown as BufferSource,
-      });
+      try {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(publicVapidKey) as unknown as BufferSource,
+        });
+      } catch (subErr) {
+        console.warn("Push subscription skipped (invalid key or unsupported by browser):", subErr);
+        return null;
+      }
     }
 
     return subscription;
   } catch (error) {
-    console.error("Failed to register Web Push Subscription:", error);
+    console.warn("Web Push registration notice:", error);
     return null;
   }
 }
