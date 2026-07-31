@@ -17,6 +17,7 @@ export interface StoredTransaction {
 
 const STORAGE_KEY = "barbershop_revenue_transactions";
 const LAST_SUBMIT_KEY = "barbershop_last_revenue_submit_time";
+const EVENT_NAME = "barbershop_revenue_updated";
 
 export function getRevenueTransactions(): StoredTransaction[] {
   if (typeof window === "undefined") return [];
@@ -30,6 +31,17 @@ export function getRevenueTransactions(): StoredTransaction[] {
   } catch (err) {
     console.error("Failed to read revenue transactions:", err);
     return [];
+  }
+}
+
+export function saveRevenueTransactions(transactions: StoredTransaction[]): void {
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(transactions));
+      window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: transactions }));
+    } catch (err) {
+      console.error("Failed to save transactions:", err);
+    }
   }
 }
 
@@ -73,13 +85,7 @@ export function addRevenueTransaction(data: {
   };
 
   const updated = [newTx, ...transactions];
-  if (typeof window !== "undefined") {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-    } catch (err) {
-      console.error("Failed to save transaction:", err);
-    }
-  }
+  saveRevenueTransactions(updated);
 
   // 2. Dispatch real-time Admin Notification & Audit Log
   const amountStr = formatVND(data.amount);
@@ -98,4 +104,26 @@ export function addRevenueTransaction(data: {
   });
 
   return { success: true, transaction: newTx };
+}
+
+export function voidRevenueTransaction(id: string): void {
+  const transactions = getRevenueTransactions();
+  const updated = transactions.map((t) => (t.id === id ? { ...t, status: "voided" as const } : t));
+  saveRevenueTransactions(updated);
+}
+
+export function subscribeRevenueTransactions(callback: (txs: StoredTransaction[]) => void): () => void {
+  if (typeof window === "undefined") return () => {};
+
+  const handler = (event: Event) => {
+    const customEvt = event as CustomEvent<StoredTransaction[]>;
+    if (customEvt.detail) {
+      callback(customEvt.detail);
+    } else {
+      callback(getRevenueTransactions());
+    }
+  };
+
+  window.addEventListener(EVENT_NAME, handler);
+  return () => window.removeEventListener(EVENT_NAME, handler);
 }

@@ -9,6 +9,9 @@ import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { getAuthSession, clearAuthSession } from "@/lib/auth";
 import { addAuditLog } from "@/lib/audit-log";
 
+import { BellRing } from "lucide-react";
+import { registerWebPushSubscription } from "@/lib/push/webpush";
+
 export default function EmployeeProfilePage() {
   const router = useRouter();
   const [session, setSession] = useState<any>(() => getAuthSession());
@@ -16,6 +19,19 @@ export default function EmployeeProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [msg, setMsg] = useState("");
+  const [notifEnabled, setNotifEnabled] = useState(true);
+
+  const toggleNotif = async () => {
+    const nextState = !notifEnabled;
+    setNotifEnabled(nextState);
+    if (nextState) {
+      await registerWebPushSubscription();
+      setMsg("Đã bật nhận thông báo công bố bảng lương & Salon!");
+    } else {
+      setMsg("Đã tắt thông báo ứng dụng.");
+    }
+    setTimeout(() => setMsg(""), 3000);
+  };
 
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,6 +88,30 @@ export default function EmployeeProfilePage() {
             <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">{empRole}</p>
             <p className="text-xs text-[rgba(23,23,23,0.5)]">Tài khoản: @{session?.username || "nhanvien"}</p>
           </div>
+        </div>
+
+        {/* Notification Settings Toggle Card */}
+        <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-4 shadow-sm flex justify-between items-center text-sm font-semibold">
+          <div className="flex items-center space-x-3">
+            <BellRing className="w-5 h-5 text-[#741F2C]" />
+            <div>
+              <div className="text-[#171717]">Thông báo ứng dụng</div>
+              <div className="text-xs text-[rgba(23,23,23,0.5)] font-normal">Nhận thông báo khi Admin công bố lương</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={toggleNotif}
+            className={`w-12 h-6 rounded-full transition-colors relative ${
+              notifEnabled ? "bg-[#741F2C]" : "bg-gray-300"
+            }`}
+          >
+            <span
+              className={`w-5 h-5 bg-white rounded-full absolute top-0.5 transition-transform ${
+                notifEnabled ? "right-0.5" : "left-0.5"
+              }`}
+            />
+          </button>
         </div>
 
         {/* Change Password Card */}

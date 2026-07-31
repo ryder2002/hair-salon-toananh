@@ -5,6 +5,8 @@ import Link from "next/link";
 import { Bell } from "lucide-react";
 import { getNotifications, subscribeNotifications } from "@/lib/notification-store";
 
+import { getAuthSession } from "@/lib/auth";
+
 interface MobileHeaderProps {
   title?: string;
   subtitle?: string;
@@ -17,8 +19,14 @@ export function MobileHeader({
   showLogo = true,
 }: MobileHeaderProps) {
   const [unreadCount, setUnreadCount] = useState(initialCount ?? 0);
+  const [role, setRole] = useState<"admin" | "employee">("employee");
 
   useEffect(() => {
+    const session = getAuthSession();
+    if (session?.role) {
+      setRole(session.role);
+    }
+
     const notifs = getNotifications();
     setUnreadCount(notifs.filter((n) => !n.isRead).length);
 
@@ -29,12 +37,15 @@ export function MobileHeader({
     return () => unsubscribe();
   }, []);
 
+  const homeHref = role === "admin" ? "/admin" : "/employee";
+  const notifHref = role === "admin" ? "/admin/notifications" : "/employee/profile";
+
   return (
     <header className="sticky top-0 z-40 bg-[#F7F3EC] border-b border-[rgba(23,23,23,0.08)] px-4 py-2.5">
       <div className="flex items-center justify-between">
         <div className="flex items-center">
           {showLogo && (
-            <Link href="/admin" className="block flex-shrink-0">
+            <Link href={homeHref} className="block flex-shrink-0">
               <img
                 src="/Logo.png"
                 alt="The Gentlemen Barbershop Logo"
@@ -45,11 +56,11 @@ export function MobileHeader({
         </div>
 
         <Link
-          href="/admin/notifications"
+          href={notifHref}
           className="relative p-2 rounded-full hover:bg-[rgba(23,23,23,0.06)] transition-colors"
         >
           <Bell className="w-5 h-5 text-[#741F2C]" />
-          {unreadCount > 0 && (
+          {unreadCount > 0 && role === "admin" && (
             <span className="absolute top-1 right-1 w-4 h-4 bg-[#741F2C] text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-[#F7F3EC] animate-pulse">
               {unreadCount > 9 ? "9+" : unreadCount}
             </span>

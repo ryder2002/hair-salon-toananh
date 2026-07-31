@@ -20,11 +20,20 @@ export function middleware(request: NextRequest) {
     );
   }
 
-  // 2. Protected routes -> check auth
-  if (isProtectedAdmin || isProtectedEmployee) {
+  // 2. Protected routes -> check auth & role permissions
+  if (isProtectedAdmin) {
     if (!authRole) {
-      const loginUrl = new URL("/login", request.url);
-      return NextResponse.redirect(loginUrl);
+      return NextResponse.redirect(new URL("/login", request.url));
+    }
+    // Block non-admin from accessing /admin pages
+    if (authRole !== "admin") {
+      return NextResponse.redirect(new URL("/employee", request.url));
+    }
+  }
+
+  if (isProtectedEmployee) {
+    if (!authRole) {
+      return NextResponse.redirect(new URL("/login", request.url));
     }
   }
 

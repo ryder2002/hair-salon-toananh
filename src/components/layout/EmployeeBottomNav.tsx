@@ -3,13 +3,14 @@
 import React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, PlusCircle, History, User } from "lucide-react";
+import { Home, PlusCircle, History, User, Wallet } from "lucide-react";
 
 export function EmployeeBottomNav() {
   const pathname = usePathname();
 
   const navItems = [
     { href: "/employee", label: "Trang chủ", icon: Home },
+    { href: "/employee/payroll", label: "Lương", icon: Wallet },
     { href: "/employee/revenue/new", label: "Ghi doanh thu", icon: PlusCircle, isPrimary: true },
     { href: "/employee/revenue", label: "Lịch sử", icon: History },
     { href: "/employee/profile", label: "Tài khoản", icon: User },

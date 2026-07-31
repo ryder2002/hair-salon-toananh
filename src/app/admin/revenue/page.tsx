@@ -11,6 +11,8 @@ import { formatVND } from "@/lib/money";
 import { addAuditLog } from "@/lib/audit-log";
 import { getDayClosingState, setDayClosingState, subscribeDayClosing } from "@/lib/day-closing-store";
 
+import { getRevenueTransactions, subscribeRevenueTransactions, voidRevenueTransaction, StoredTransaction } from "@/lib/revenue-store";
+
 export default function RevenueManagementPage() {
   const [activeFilter, setActiveFilter] = useState("today");
   const [isClosed, setIsClosed] = useState(false);
@@ -19,17 +21,40 @@ export default function RevenueManagementPage() {
   const [selectedTx, setSelectedTx] = useState<TransactionItem | null>(null);
   const [voidReason, setVoidReason] = useState("");
   const [toastMsg, setToastMsg] = useState("");
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+
+  const loadLatestTransactions = () => {
+    const rawList = getRevenueTransactions();
+    const formatted: TransactionItem[] = rawList.map((t: StoredTransaction) => ({
+      id: t.id,
+      staffName: t.staffName,
+      avatarType: t.avatarType || "scissors",
+      serviceName: t.serviceName,
+      amount: BigInt(t.amount || 0),
+      paymentMethod: t.paymentMethod,
+      time: t.time,
+      status: t.status,
+    }));
+    setTransactions(formatted);
+  };
 
   useEffect(() => {
     const current = getDayClosingState();
     setIsClosed(current.isClosed);
-    const unsubscribe = subscribeDayClosing((state) => {
+    const unsubscribeClosing = subscribeDayClosing((state) => {
       setIsClosed(state.isClosed);
     });
-    return () => unsubscribe();
-  }, []);
 
-  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+    loadLatestTransactions();
+    const unsubscribeRevenue = subscribeRevenueTransactions(() => {
+      loadLatestTransactions();
+    });
+
+    return () => {
+      unsubscribeClosing();
+      unsubscribeRevenue();
+    };
+  }, []);
 
   const triggerToast = (msg: string) => {
     setToastMsg(msg);
@@ -48,9 +73,9 @@ export default function RevenueManagementPage() {
   const handleVoidTx = () => {
     if (!selectedTx || !voidReason) return;
 
-    setTransactions((prev) =>
-      prev.map((t) => (t.id === selectedTx.id ? { ...t, status: "voided" } : t))
-    );
+    // Void transaction in store
+    voidRevenueTransaction(selectedTx.id);
+
     addAuditLog({
       action: "REVENUE_VOIDED",
       actorName: "Admin Manager",

@@ -7,7 +7,7 @@ import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { formatVND } from "@/lib/money";
 import { PayrollMonthPickerModal } from "@/components/ui/PayrollMonthPickerModal";
 import { getCurrentVietnamMonthStr } from "@/lib/dates";
-import { getMonthPayroll, StoredPayrollRow } from "@/lib/payroll-store";
+import { getMonthPayroll, subscribePayroll, StoredPayrollRow } from "@/lib/payroll-store";
 
 import { getAuthSession } from "@/lib/auth";
 import { Lock, ShieldAlert } from "lucide-react";
@@ -19,8 +19,8 @@ export default function EmployeePayrollPage() {
   const [mySlip, setMySlip] = useState<StoredPayrollRow | null>(null);
   const [isPublished, setIsPublished] = useState(false);
 
-  useEffect(() => {
-    const data = getMonthPayroll(selectedMonth);
+  const loadPayrollForMonth = (monthStr: string) => {
+    const data = getMonthPayroll(monthStr);
     const publishedState = data.globalStatus === "published" || data.globalStatus === "paid";
     setIsPublished(publishedState);
 
@@ -35,6 +35,18 @@ export default function EmployeePayrollPage() {
     ) || null;
 
     setMySlip(empRow);
+  };
+
+  useEffect(() => {
+    loadPayrollForMonth(selectedMonth);
+
+    const unsubscribe = subscribePayroll((updatedData) => {
+      if (updatedData.month === selectedMonth) {
+        loadPayrollForMonth(selectedMonth);
+      }
+    });
+
+    return () => unsubscribe();
   }, [selectedMonth, session]);
 
   const empName = session?.fullName || mySlip?.name || "Nhân viên";

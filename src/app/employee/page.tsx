@@ -1,40 +1,94 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
-import { PlusCircle, Calendar, Banknote, CreditCard } from "lucide-react";
+import { PlusCircle, Calendar, Banknote, CreditCard, Scissors } from "lucide-react";
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
+import { getAuthSession } from "@/lib/auth";
+import { getRevenueTransactions, subscribeRevenueTransactions, StoredTransaction } from "@/lib/revenue-store";
+import { getVietnamBusinessDate } from "@/lib/dates";
 
 export default function EmployeeDashboardPage() {
-  const transactions: TransactionItem[] = [
-    {
-      id: "e1",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Cắt tóc + Gội đầu",
-      amount: 250000n,
-      paymentMethod: "cash",
-      time: "09:35",
-      status: "recorded",
-    },
-    {
-      id: "e2",
-      staffName: "Minh Quân",
-      avatarType: "pole",
-      serviceName: "Cạo mặt",
-      amount: 150000n,
-      paymentMethod: "bank_transfer",
-      time: "08:15",
-      status: "recorded",
-    },
-  ];
+  const [session, setSession] = useState<any>(null);
+  const [transactions, setTransactions] = useState<TransactionItem[]>([]);
+  const [todayTotal, setTodayTotal] = useState<bigint>(0n);
+  const [todayCash, setTodayCash] = useState<bigint>(0n);
+  const [todayTransfer, setTodayTransfer] = useState<bigint>(0n);
+  const [monthTotal, setMonthTotal] = useState<bigint>(0n);
+  const [cutCount, setCutCount] = useState<number>(0);
+  const [businessDate, setBusinessDate] = useState<string>("");
+
+  const loadEmployeeData = () => {
+    const activeSession = getAuthSession();
+    setSession(activeSession);
+    const currentDate = getVietnamBusinessDate();
+    setBusinessDate(currentDate);
+
+    const empName = activeSession?.fullName || "";
+    const empUsername = activeSession?.username || "";
+
+    const allTx = getRevenueTransactions();
+
+    // Filter transactions for this employee
+    const empTx = allTx.filter((t: StoredTransaction) => {
+      if (t.status === "voided") return false;
+      const tStaff = t.staffName.toLowerCase();
+      const tUser = (t.username || "").toLowerCase();
+
+      return (
+        (empName && tStaff.includes(empName.toLowerCase())) ||
+        (empUsername && (tStaff.includes(empUsername.toLowerCase()) || tUser.includes(empUsername.toLowerCase())))
+      );
+    });
+
+    let cCash = 0n;
+    let cTransfer = 0n;
+    let cMonth = 0n;
+    let count = 0;
+
+    const formattedList: TransactionItem[] = empTx.map((t: StoredTransaction) => {
+      const amt = BigInt(t.amount || 0);
+      cMonth += amt;
+      cCash += t.paymentMethod === "cash" ? amt : 0n;
+      cTransfer += t.paymentMethod === "bank_transfer" ? amt : 0n;
+      count += 1;
+
+      return {
+        id: t.id,
+        staffName: t.staffName,
+        avatarType: t.avatarType || "scissors",
+        serviceName: t.serviceName,
+        amount: amt,
+        paymentMethod: t.paymentMethod,
+        time: t.time,
+        status: t.status,
+      };
+    });
+
+    setTransactions(formattedList);
+    setTodayCash(cCash);
+    setTodayTransfer(cTransfer);
+    setTodayTotal(cCash + cTransfer);
+    setMonthTotal(cMonth);
+    setCutCount(count);
+  };
+
+  useEffect(() => {
+    loadEmployeeData();
+    const unsubscribe = subscribeRevenueTransactions(() => {
+      loadEmployeeData();
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const empDisplayName = session?.fullName ? session.fullName.split(" ").slice(-2).join(" ") : "bạn";
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-24 max-w-md mx-auto relative shadow-xl">
-      <MobileHeader title="Barbershop Manager" subtitle="Chào anh, Minh Quân" unreadCount={2} />
+      <MobileHeader title="Barbershop Manager" subtitle={`Chào anh, ${empDisplayName}`} unreadCount={0} />
 
       <main className="px-4 pt-3 space-y-4">
         {/* Quick Action Button */}
@@ -53,21 +107,21 @@ export default function EmployeeDashboardPage() {
               <Calendar className="w-3.5 h-3.5" />
               <span>Doanh thu hôm nay của tôi</span>
             </span>
-            <span>22/05/2025</span>
+            <span>{businessDate || "Hôm nay"}</span>
           </div>
 
           <div className="text-2xl font-bold tracking-tight">
-            {formatVND(400000n)}
+            {formatVND(todayTotal)}
           </div>
 
           <div className="grid grid-cols-2 gap-2 pt-1 text-xs border-t border-white/15">
             <div className="flex items-center space-x-1.5 text-white/90">
-              <Banknote className="w-4 h-4" />
-              <span>Tiền mặt: <strong>250.000 đ</strong></span>
+              <Banknote className="w-4 h-4 flex-shrink-0" />
+              <span>Tiền mặt: <strong>{formatVND(todayCash)}</strong></span>
             </div>
             <div className="flex items-center space-x-1.5 text-white/90">
-              <CreditCard className="w-4 h-4" />
-              <span>Chuyển khoản: <strong>150.000 đ</strong></span>
+              <CreditCard className="w-4 h-4 flex-shrink-0" />
+              <span>Chuyển khoản: <strong>{formatVND(todayTransfer)}</strong></span>
             </div>
           </div>
         </div>
@@ -76,11 +130,11 @@ export default function EmployeeDashboardPage() {
         <div className="bg-white border border-[rgba(23,23,23,0.12)] p-3.5 rounded-[14px] shadow-sm flex items-center justify-between">
           <div>
             <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Doanh thu tháng này</div>
-            <div className="text-lg font-bold text-[#741F2C] mt-0.5">{formatVND(5250000n)}</div>
+            <div className="text-lg font-bold text-[#741F2C] mt-0.5">{formatVND(monthTotal)}</div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Số lượt cắt</div>
-            <div className="text-lg font-bold text-[#171717] mt-0.5">24 lượt</div>
+            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Số lượt phục vụ</div>
+            <div className="text-lg font-bold text-[#171717] mt-0.5">{cutCount} lượt</div>
           </div>
         </div>
 
@@ -97,7 +151,17 @@ export default function EmployeeDashboardPage() {
               Xem tất cả &gt;
             </Link>
           </div>
-          <RecentTransactionsList transactions={transactions} />
+
+          {transactions.length === 0 ? (
+            <div className="bg-white border border-[rgba(23,23,23,0.12)] rounded-[14px] p-6 text-center shadow-sm space-y-2">
+              <Scissors className="w-8 h-8 text-[rgba(23,23,23,0.3)] mx-auto" />
+              <p className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+                Chưa có lượt cắt nào trong ngày hôm nay.
+              </p>
+            </div>
+          ) : (
+            <RecentTransactionsList transactions={transactions} />
+          )}
         </section>
       </main>
 
