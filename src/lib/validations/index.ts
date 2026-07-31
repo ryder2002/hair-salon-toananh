@@ -13,11 +13,11 @@ export const RevenueEntrySchema = z.object({
 });
 
 export const EmployeeCreateSchema = z.object({
-  full_name: z.string().min(2, "Họ tên tối thiểu 2 ký tự"),
-  email: z.string().email("Email không hợp lệ"),
-  phone: z.string().min(10, "Số điện thoại tối thiểu 10 số").max(11),
-  job_title: z.string().min(2, "Chức vụ không được để trống"),
-  temporary_password: z.string().min(6, "Mật khẩu tối thiểu 6 ký tự"),
+  full_name: z.string().min(1, "Họ tên không được để trống"),
+  email: z.string().optional(),
+  phone: z.string().optional(),
+  job_title: z.string().optional(),
+  temporary_password: z.string().optional(),
 });
 
 export const SalarySettingSchema = z.object({
