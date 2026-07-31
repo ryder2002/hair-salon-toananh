@@ -18,39 +18,54 @@ export function MobileHeader({
   unreadCount: initialCount,
   showLogo = true,
 }: MobileHeaderProps) {
-  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [unreadCount, setUnreadCount] = useState<number>(initialCount ?? 0);
   const [role, setRole] = useState<"admin" | "employee">("employee");
   const [showEmpNotifModal, setShowEmpNotifModal] = useState(false);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  useEffect(() => {
+    if (initialCount !== undefined) {
+      setUnreadCount(initialCount);
+    }
+  }, [initialCount]);
 
   useEffect(() => {
     async function load() {
       try {
         const session = await loadAuthSession();
         if (session?.role) setRole(session.role);
-        const count = await fetchUnreadNotificationCountAction();
-        setUnreadCount(count);
 
-        const data = await fetchNotificationsAction();
-        if (data) {
-          setNotifications(
-            data.map((n: any) => ({
-              id: n.id,
-              title: n.title,
-              message: n.message,
-              type: n.type || "system",
-              isRead: !!n.read_at,
-              timestamp: new Date(n.created_at).toLocaleString("vi-VN"),
-              url: n.data?.url || "/admin/revenue",
-            }))
-          );
+        if (initialCount === undefined) {
+          const count = await fetchUnreadNotificationCountAction();
+          setUnreadCount(count);
         }
       } catch (e) {
-        console.warn("DB notifications fetch error:", e);
+        console.warn("DB notifications header error:", e);
       }
     }
     load();
-  }, []);
+  }, [initialCount]);
+
+  const loadNotificationsForEmployee = async () => {
+    try {
+      const data = await fetchNotificationsAction();
+      if (data) {
+        setNotifications(
+          data.map((n: any) => ({
+            id: n.id,
+            title: n.title,
+            message: n.message,
+            type: n.type || "system",
+            isRead: !!n.read_at,
+            timestamp: new Date(n.created_at).toLocaleString("vi-VN"),
+            url: n.data?.url || "/admin/revenue",
+          }))
+        );
+      }
+    } catch (e) {
+      console.warn("DB notifications list fetch error:", e);
+    }
+  };
 
   const homeHref = role === "admin" ? "/admin" : "/employee";
 
@@ -62,6 +77,7 @@ export function MobileHeader({
 
     if (role === "employee") {
       e.preventDefault();
+      await loadNotificationsForEmployee();
       setShowEmpNotifModal(true);
     }
   };
@@ -72,7 +88,7 @@ export function MobileHeader({
         <div className="flex items-center justify-between">
           <div className="flex items-center">
             {showLogo && (
-              <Link href={homeHref} className="block flex-shrink-0">
+              <Link href={homeHref} prefetch={false} className="block flex-shrink-0">
                 <img
                   src="/Logo.png"
                   alt="The Gentlemen Barbershop Logo"
@@ -85,6 +101,7 @@ export function MobileHeader({
           {role === "admin" ? (
             <Link
               href="/admin/notifications"
+              prefetch={false}
               className="relative p-2 rounded-full hover:bg-[rgba(23,23,23,0.06)] transition-colors"
             >
               <Bell className="w-5 h-5 text-[#741F2C]" />

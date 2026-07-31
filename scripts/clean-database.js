@@ -16,75 +16,145 @@ if (fs.existsSync(envPath)) {
 const supabaseUrl = envVars["NEXT_PUBLIC_SUPABASE_URL"];
 const serviceRoleKey = envVars["SUPABASE_SERVICE_ROLE_KEY"];
 
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error("❌ Thiếu NEXT_PUBLIC_SUPABASE_URL hoặc SUPABASE_SERVICE_ROLE_KEY trong .env.local");
+  process.exit(1);
+}
+
 const { createClient } = require("@supabase/supabase-js");
 const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-async function cleanDatabase() {
-  console.log("🧹 BẮT ĐẦU DỌN DẸP SẠCH CSDL SUPABASE CLOUD (GIỮ LẠI TÀI KHOẢN ADMIN)...\n");
+async function cleanDatabaseAndSeedAdmin() {
+  console.log("==================================================================");
+  console.log("🧹 DỌN DẸP SẠCH DỮ LIỆU CSDL & KHỞI TẠO TÀI KHOẢN ADMIN TRỦ LẠI");
+  console.log("==================================================================\n");
 
-  // 1. Delete all revenue_entries
-  const { error: revErr } = await supabase.from("revenue_entries").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp doanh thu (revenue_entries):", revErr ? revErr.message : "Thành công");
+  const SHOP_ID = "a0000000-0000-0000-0000-000000000001";
+  const ADMIN_EMAIL = "admin@barbershop.local";
+  const ADMIN_USERNAME = "admin";
+  const ADMIN_PASSWORD = "admin123";
 
-  // 2. Delete all payrolls
-  const { error: payErr } = await supabase.from("payrolls").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp bảng lương (payrolls):", payErr ? payErr.message : "Thành công");
+  // 1. Delete operational data
+  console.log("1. Đang dọn dẹp các bảng dữ liệu nghiệp vụ...");
+  await supabase.from("revenue_entries").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("payrolls").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("daily_closings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("push_subscriptions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("audit_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  await supabase.from("salary_settings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  console.log("✔ Đã dọn dẹp sạch toàn bộ giao dịch, bảng lương, chốt ngày, thông báo, nhật ký.");
 
-  // 3. Delete all daily_closings
-  const { error: closeErr } = await supabase.from("daily_closings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp chốt ngày (daily_closings):", closeErr ? closeErr.message : "Thành công");
-
-  // 4. Delete all notifications
-  const { error: notifErr } = await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp thông báo (notifications):", notifErr ? notifErr.message : "Thành công");
-
-  // 5. Delete all push_subscriptions
-  const { error: pushErr } = await supabase.from("push_subscriptions").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp đăng ký push (push_subscriptions):", pushErr ? pushErr.message : "Thành công");
-
-  // 6. Delete all audit_logs
-  const { error: auditErr } = await supabase.from("audit_logs").delete().neq("id", "00000000-0000-0000-0000-000000000000");
-  console.log("✔ Dọn dẹp nhật ký (audit_logs):", auditErr ? auditErr.message : "Thành công");
-
-  // 7. Delete salary_settings for non-admin employees
-  const { data: nonAdminProfiles } = await supabase
-    .from("profiles")
-    .select("id, full_name, email")
-    .neq("role", "admin");
-
-  if (nonAdminProfiles && nonAdminProfiles.length > 0) {
-    for (const p of nonAdminProfiles) {
-      await supabase.from("salary_settings").delete().eq("employee_id", p.id);
-      await supabase.from("profiles").delete().eq("id", p.id);
-    }
-    console.log(`✔ Dọn dẹp ${nonAdminProfiles.length} tài khoản nhân viên thử nghiệm: Thành công`);
+  // 2. Ensure default shop exists
+  console.log("\n2. Kiểm tra thông tin Shop...");
+  const { data: existingShop } = await supabase.from("shops").select("id").eq("id", SHOP_ID).maybeSingle();
+  if (!existingShop) {
+    await supabase.from("shops").insert({
+      id: SHOP_ID,
+      name: "Toàn Anh Hair Salon",
+      timezone: "Asia/Ho_Chi_Minh",
+      currency: "VND",
+    });
+    console.log("✔ Đã khởi tạo Cửa hàng: Toàn Anh Hair Salon");
   } else {
-    console.log("✔ Không có nhân viên phụ nào cần xóa.");
+    console.log("✔ Cửa hàng Toàn Anh Hair Salon đã tồn tại.");
   }
 
-  // Delete non-admin auth users from Supabase Auth
-  try {
-    const { data: authUsers } = await supabase.auth.admin.listUsers();
-    if (authUsers && authUsers.users) {
-      for (const u of authUsers.users) {
-        if (u.email !== "admin@barbershop.local") {
-          await supabase.auth.admin.deleteUser(u.id);
-        }
+  // 3. Setup / Reset Admin Auth User
+  console.log("\n3. Khởi tạo / Cập nhật tài khoản Admin trong Supabase Auth...");
+  const { data: authUsers } = await supabase.auth.admin.listUsers();
+  let adminAuthUser = authUsers?.users?.find(
+    (u) => u.email === ADMIN_EMAIL || u.id === "a0000000-0000-0000-0000-000000000001"
+  );
+
+  // Delete non-admin auth users
+  if (authUsers?.users) {
+    for (const u of authUsers.users) {
+      if (u.email !== ADMIN_EMAIL && u.id !== "a0000000-0000-0000-0000-000000000001") {
+        await supabase.from("profiles").delete().eq("id", u.id);
+        await supabase.auth.admin.deleteUser(u.id);
       }
     }
-    console.log("✔ Dọn dẹp người dùng trong Supabase Auth (chỉ giữ admin): Thành công");
-  } catch (e) {
-    console.warn("Auth delete warning:", e.message);
+  }
+  await supabase.from("profiles").delete().neq("email", ADMIN_EMAIL).neq("username", ADMIN_USERNAME);
+
+  let adminId;
+  if (!adminAuthUser) {
+    const { data: newAuth, error: createAuthErr } = await supabase.auth.admin.createUser({
+      email: ADMIN_EMAIL,
+      password: ADMIN_PASSWORD,
+      email_confirm: true,
+      user_metadata: { full_name: "Đinh Công Nhất", role: "admin" },
+    });
+    if (createAuthErr || !newAuth.user) {
+      throw new Error(`Không thể tạo Auth user cho Admin: ${createAuthErr?.message}`);
+    }
+    adminAuthUser = newAuth.user;
+    adminId = newAuth.user.id;
+    console.log(`✔ Đã tạo mới tài khoản Admin trong Supabase Auth (ID: ${adminId})`);
+  } else {
+    adminId = adminAuthUser.id;
+    const { error: updateAuthErr } = await supabase.auth.admin.updateUserById(adminId, {
+      password: ADMIN_PASSWORD,
+      email_confirm: true,
+    });
+    if (updateAuthErr) {
+      throw new Error(`Không thể cập nhật mật khẩu Admin: ${updateAuthErr.message}`);
+    }
+    console.log(`✔ Đã cập nhật mật khẩu Admin thành '${ADMIN_PASSWORD}' cho tài khoản Supabase Auth (ID: ${adminId})`);
   }
 
-  // Verify remaining Admin account
-  const { data: adminProfiles } = await supabase.from("profiles").select("id, full_name, email, role").eq("role", "admin");
-  console.log("\n👑 Tài khoản Admin duy nhất được giữ lại:");
-  console.log(adminProfiles);
+  // 4. Upsert Admin Profile
+  console.log("\n4. Khởi tạo / Cập nhật Hồ sơ Admin trong bảng `profiles`...");
+  const { data: existingProfile } = await supabase.from("profiles").select("id, role, status").eq("id", adminId).maybeSingle();
+
+  let profileErr = null;
+  if (existingProfile) {
+    const { error } = await supabase.from("profiles").update({
+      full_name: "Đinh Công Nhất",
+      email: ADMIN_EMAIL,
+      username: ADMIN_USERNAME,
+      phone: "0900000000",
+      job_title: "Quản lý tiệm",
+      must_change_password: false,
+      updated_at: new Date().toISOString(),
+    }).eq("id", adminId);
+    profileErr = error;
+  } else {
+    const { error } = await supabase.from("profiles").insert({
+      id: adminId,
+      shop_id: SHOP_ID,
+      full_name: "Đinh Công Nhất",
+      email: ADMIN_EMAIL,
+      username: ADMIN_USERNAME,
+      phone: "0900000000",
+      job_title: "Quản lý tiệm",
+      role: "admin",
+      status: "active",
+      must_change_password: false,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    profileErr = error;
+  }
+
+  if (profileErr) {
+    throw new Error(`Không thể lưu profile Admin: ${profileErr.message}`);
+  }
+
+  console.log("✔ Đã lưu hồ sơ Admin thành công vào bảng `profiles`.");
 
   console.log("\n==================================================================");
-  console.log("🎉 CSDL DÃ ĐƯỢC CLEAR SẠCH SẼ - HỆ THỐNG SẴN SÀNG LÀM VÀI TỪ ĐẦU!");
+  console.log("🎉 XONG! CSDL ĐÃ ĐƯỢC DỌN SẠCH & KHỞI TẠO SEED THÀNH CÔNG");
   console.log("==================================================================");
+  console.log("🔑 THÔNG TIN ĐĂNG NHẬP ADMIN:");
+  console.log(`   - Tên đăng nhập (Username) : ${ADMIN_USERNAME}`);
+  console.log(`   - Email                    : ${ADMIN_EMAIL}`);
+  console.log(`   - Mật khẩu (Password)      : ${ADMIN_PASSWORD}`);
+  console.log("==================================================================\n");
 }
 
-cleanDatabase().catch(console.error);
+cleanDatabaseAndSeedAdmin().catch((err) => {
+  console.error("❌ Lỗi dọn dẹp và seed CSDL:", err);
+  process.exit(1);
+});

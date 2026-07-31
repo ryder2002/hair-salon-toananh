@@ -31,6 +31,7 @@ export function EmployeeBottomNav() {
               <Link
                 key={item.href}
                 href={item.href}
+                prefetch={false}
                 className="flex flex-col items-center justify-center flex-1 h-full relative"
               >
                 <div className="w-10 h-10 rounded-full bg-[#741F2C] text-white flex items-center justify-center shadow-md active:scale-95 transition-transform">
@@ -47,6 +48,7 @@ export function EmployeeBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               className="flex flex-col items-center justify-center flex-1 h-full relative"
             >
               {isActive && (

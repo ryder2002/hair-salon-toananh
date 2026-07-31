@@ -7,16 +7,11 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND } from "@/lib/money";
-import { loadAuthSession, type UserSession } from "@/lib/auth";
 import { subscribeRealtime } from "@/lib/realtime";
-import { getVietnamBusinessDate } from "@/lib/dates";
-
-import { getCurrentBusinessDateAction } from "@/server/actions/day-closing";
-import { fetchRevenuesAction } from "@/server/actions/revenue";
+import { getEmployeeDashboardDataAction } from "@/server/actions/revenue";
 import { syncOfflineRevenues } from "@/lib/offline/sync";
 
 export default function EmployeeDashboardPage() {
-  const [session, setSession] = useState<UserSession | null>(null);
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
   const [todayTotal, setTodayTotal] = useState<bigint>(0n);
   const [todayCash, setTodayCash] = useState<bigint>(0n);
@@ -24,67 +19,41 @@ export default function EmployeeDashboardPage() {
   const [monthTotal, setMonthTotal] = useState<bigint>(0n);
   const [cutCount, setCutCount] = useState<number>(0);
   const [businessDate, setBusinessDate] = useState<string>("");
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [employeeName, setEmployeeName] = useState<string>("");
 
   const loadEmployeeData = async () => {
-    const activeSession = await loadAuthSession();
-    setSession(activeSession);
-
-    // Fetch dynamic business date from DB (advances automatically when Admin closes day)
-    let currentDate = getVietnamBusinessDate();
     try {
-      currentDate = await getCurrentBusinessDateAction();
-    } catch (e) {}
-    setBusinessDate(currentDate);
+      const data = await getEmployeeDashboardDataAction();
+      setBusinessDate(data.businessDate);
+      setTodayCash(BigInt(data.todayCash || "0"));
+      setTodayTransfer(BigInt(data.todayTransfer || "0"));
+      setTodayTotal(BigInt(data.todayTotal || "0"));
+      setMonthTotal(BigInt(data.monthTotal || "0"));
+      setCutCount(data.cutCount);
+      setUnreadCount(data.unreadNotificationCount);
+      setEmployeeName(data.employeeName);
 
-    const empName = activeSession?.fullName || "";
-
-    // 1. Fetch DB revenues
-    try {
-      const dbEntries = await fetchRevenuesAction(currentDate);
-      if (dbEntries) {
-        let cCash = 0n;
-        let cTransfer = 0n;
-        let cMonth = 0n;
-        let count = 0;
-
-        const formattedList: TransactionItem[] = [];
-        dbEntries.forEach((e: any) => {
-          if (e.status === "voided") return;
-          const amt = BigInt(e.amount || 0);
-          cMonth += amt;
-          if (e.payment_method === "cash") cCash += amt;
-          if (e.payment_method === "bank_transfer") cTransfer += amt;
-          count += 1;
-
-          formattedList.push({
-            id: e.id,
-            staffName: e.profiles?.full_name || empName,
-            avatarType: "scissors",
-            serviceName: e.service_name || "Dịch vụ tóc",
-            amount: amt,
-            paymentMethod: e.payment_method,
-            time: new Date(e.performed_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" }),
-            status: e.status,
-          });
-        });
-
-        setTransactions(formattedList);
-        setTodayCash(cCash);
-        setTodayTransfer(cTransfer);
-        setTodayTotal(cCash + cTransfer);
-        setMonthTotal(cMonth);
-        setCutCount(count);
-      }
+      setTransactions(
+        data.transactions.map((t: any) => ({
+          ...t,
+          amount: BigInt(t.amount || "0"),
+        }))
+      );
     } catch (err) {
-      console.warn("DB employee revenue fetch error:", err);
+      console.warn("DB employee dashboard fetch error:", err);
     }
   };
 
   useEffect(() => {
     void syncOfflineRevenues();
     loadEmployeeData();
-    const unsubscribe = subscribeRealtime(() => { void loadEmployeeData(); });
-    const interval = window.setInterval(() => { void loadEmployeeData(); }, 30000);
+    const unsubscribe = subscribeRealtime(() => {
+      void loadEmployeeData();
+    });
+    const interval = window.setInterval(() => {
+      void loadEmployeeData();
+    }, 30000);
 
     return () => {
       unsubscribe();
@@ -92,16 +61,23 @@ export default function EmployeeDashboardPage() {
     };
   }, []);
 
-  const empDisplayName = session?.fullName ? session.fullName.split(" ").slice(-2).join(" ") : "bạn";
+  const empDisplayName = employeeName
+    ? employeeName.split(" ").slice(-2).join(" ")
+    : "bạn";
 
   return (
     <div className="min-h-screen bg-[#F7F3EC] pb-24 max-w-md mx-auto relative shadow-xl">
-      <MobileHeader title="Barbershop Manager" subtitle={`Chào anh, ${empDisplayName}`} unreadCount={0} />
+      <MobileHeader
+        title="Barbershop Manager"
+        subtitle={`Chào anh, ${empDisplayName}`}
+        unreadCount={unreadCount}
+      />
 
       <main className="px-4 pt-3 space-y-4">
         {/* Quick Action Button */}
         <Link
           href="/employee/revenue/new"
+          prefetch={false}
           className="w-full bg-[#741F2C] text-white py-4 rounded-[14px] font-bold text-lg flex items-center justify-center space-x-2.5 shadow-md active:scale-98 transition-transform"
         >
           <PlusCircle className="w-6 h-6" />
@@ -125,11 +101,15 @@ export default function EmployeeDashboardPage() {
           <div className="grid grid-cols-2 gap-2 pt-1 text-xs border-t border-white/15">
             <div className="flex items-center space-x-1.5 text-white/90">
               <Banknote className="w-4 h-4 flex-shrink-0" />
-              <span>Tiền mặt: <strong>{formatVND(todayCash)}</strong></span>
+              <span>
+                Tiền mặt: <strong>{formatVND(todayCash)}</strong>
+              </span>
             </div>
             <div className="flex items-center space-x-1.5 text-white/90">
               <CreditCard className="w-4 h-4 flex-shrink-0" />
-              <span>Chuyển khoản: <strong>{formatVND(todayTransfer)}</strong></span>
+              <span>
+                Chuyển khoản: <strong>{formatVND(todayTransfer)}</strong>
+              </span>
             </div>
           </div>
         </div>
@@ -137,12 +117,20 @@ export default function EmployeeDashboardPage() {
         {/* Employee Month Stats Card */}
         <div className="bg-white border border-[rgba(23,23,23,0.12)] p-3.5 rounded-[14px] shadow-sm flex items-center justify-between">
           <div>
-            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Doanh thu tháng này</div>
-            <div className="text-lg font-bold text-[#741F2C] mt-0.5">{formatVND(monthTotal)}</div>
+            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+              Doanh thu tháng này
+            </div>
+            <div className="text-lg font-bold text-[#741F2C] mt-0.5">
+              {formatVND(monthTotal)}
+            </div>
           </div>
           <div className="text-right">
-            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">Số lượt phục vụ</div>
-            <div className="text-lg font-bold text-[#171717] mt-0.5">{cutCount} lượt</div>
+            <div className="text-xs text-[rgba(23,23,23,0.6)] font-medium">
+              Số lượt phục vụ
+            </div>
+            <div className="text-lg font-bold text-[#171717] mt-0.5">
+              {cutCount} lượt
+            </div>
           </div>
         </div>
 
@@ -154,6 +142,7 @@ export default function EmployeeDashboardPage() {
             </h3>
             <Link
               href="/employee/revenue"
+              prefetch={false}
               className="text-xs font-semibold text-[#741F2C] hover:underline"
             >
               Xem tất cả &gt;

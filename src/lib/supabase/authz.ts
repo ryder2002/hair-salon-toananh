@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 
 export type AuthorizedProfile = {
@@ -12,14 +13,14 @@ export type AuthorizedProfile = {
   must_change_password: boolean;
 };
 
-export async function requireUser() {
+export const requireUser = cache(async () => {
   const supabase = await createServerSupabaseClient();
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) throw new Error("UNAUTHORIZED");
   return { supabase, user: data.user };
-}
+});
 
-export async function requireActiveProfile() {
+export const requireActiveProfile = cache(async () => {
   const { supabase, user } = await requireUser();
   const { data: profile, error } = await supabase
     .from("profiles")
@@ -30,13 +31,13 @@ export async function requireActiveProfile() {
 
   if (error || !profile) throw new Error("ACCOUNT_INACTIVE_OR_PROFILE_MISSING");
   return { supabase, user, profile: profile as AuthorizedProfile };
-}
+});
 
-export async function requireAdmin() {
+export const requireAdmin = cache(async () => {
   const result = await requireActiveProfile();
   if (result.profile.role !== "admin") throw new Error("FORBIDDEN");
   return result;
-}
+});
 
 export function isAuthorizationError(error: unknown) {
   const message = error instanceof Error ? error.message : String(error || "");

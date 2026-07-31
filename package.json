@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:all": "node scripts/test-all-features.js",
-    "test:db": "node scripts/test-supabase-db-flow.js"
+    "test:db": "node scripts/test-supabase-db-flow.js",
+    "seed:admin": "node scripts/seed-admin.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

@@ -30,6 +30,7 @@ export function AdminBottomNav() {
             <Link
               key={item.href}
               href={item.href}
+              prefetch={false}
               className="flex flex-col items-center justify-center flex-1 h-full relative"
             >
               {/* Active top line indicator matching design screenshots */}

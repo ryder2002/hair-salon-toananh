@@ -4,15 +4,31 @@ import React, { useEffect, useState } from "react";
 import { AlertTriangle, CalendarCheck, RotateCcw, Store, X } from "lucide-react";
 import { closeDayAction, getBusinessDayStatusAction, getCurrentBusinessDateAction, reopenDayAction } from "@/server/actions/day-closing";
 
-export function DayClosingCard({ onCloseDay }: { onCloseDay?: () => void }) {
-  const [businessDate, setBusinessDate] = useState("");
-  const [closed, setClosed] = useState(false);
+interface DayClosingCardProps {
+  onCloseDay?: () => void;
+  initialBusinessDate?: string;
+  initialClosed?: boolean;
+}
+
+export function DayClosingCard({ onCloseDay, initialBusinessDate, initialClosed }: DayClosingCardProps) {
+  const [businessDate, setBusinessDate] = useState(initialBusinessDate || "");
+  const [closed, setClosed] = useState(initialClosed ?? false);
   const [showModal, setShowModal] = useState(false);
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  useEffect(() => {
+    if (initialBusinessDate !== undefined) {
+      setBusinessDate(initialBusinessDate);
+    }
+    if (initialClosed !== undefined) {
+      setClosed(initialClosed);
+    }
+  }, [initialBusinessDate, initialClosed]);
+
   const load = async () => {
+    if (initialBusinessDate !== undefined && initialClosed !== undefined) return;
     try {
       const date = await getCurrentBusinessDateAction();
       const status = await getBusinessDayStatusAction(date);
