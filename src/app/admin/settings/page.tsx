@@ -57,7 +57,7 @@ export default function AdminSettingsPage() {
 
     addAuditLog({
       action: "PASSWORD_CHANGED",
-      actorName: "Định Công Nhật",
+      actorName: "Đinh Công Nhất",
       actorRole: "admin",
       details: "Đã đổi mật khẩu tài khoản Admin thành công",
     });

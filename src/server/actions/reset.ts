@@ -44,7 +44,7 @@ export async function clearAllDatabaseDataAction() {
     await adminClient.from("profiles").upsert({
       id: adminId,
       shop_id: shopId,
-      full_name: "Đinh Công Nhật (Admin)",
+      full_name: "Đinh Công Nhất (Admin)",
       email: "admin@barbershop.com",
       phone: "0901234567",
       job_title: "Chủ tiệm / Admin",

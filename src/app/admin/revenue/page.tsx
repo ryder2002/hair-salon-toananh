@@ -36,7 +36,7 @@ export default function RevenueManagementPage() {
 
       // Fetch from Supabase DB
       const dbEntries = await fetchRevenuesAction(date);
-      if (dbEntries && dbEntries.length > 0) {
+      if (dbEntries) {
         const formatted: TransactionItem[] = dbEntries.map((e: any) => ({
           id: e.id,
           staffName: e.profiles?.full_name || "Nhân viên",
@@ -48,25 +48,10 @@ export default function RevenueManagementPage() {
           status: e.status,
         }));
         setTransactions(formatted);
-        return;
       }
     } catch (err) {
-      console.warn("DB revenue fetch fallback:", err);
+      console.warn("DB revenue fetch error:", err);
     }
-
-    // Fallback to local store
-    const rawList = getRevenueTransactions();
-    const formatted: TransactionItem[] = rawList.map((t: StoredTransaction) => ({
-      id: t.id,
-      staffName: t.staffName,
-      avatarType: t.avatarType || "scissors",
-      serviceName: t.serviceName,
-      amount: BigInt(t.amount || 0),
-      paymentMethod: t.paymentMethod,
-      time: t.time,
-      status: t.status,
-    }));
-    setTransactions(formatted);
   };
 
   useEffect(() => {

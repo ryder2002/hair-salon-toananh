@@ -33,16 +33,11 @@ export default function AdminDashboardPage() {
     let recorded: any[] = [];
     try {
       const dbData = await fetchRevenuesAction(dateStr);
-      if (dbData && dbData.length > 0) {
+      if (dbData) {
         recorded = dbData.filter((t: any) => t.status === "recorded");
       }
     } catch (err) {
-      console.warn("DB fetch error, fallback to local:", err);
-    }
-
-    if (recorded.length === 0) {
-      const rawList = getRevenueTransactions();
-      recorded = rawList.filter((t) => t.status === "recorded");
+      console.warn("DB fetch error:", err);
     }
 
     let cash = 0n;

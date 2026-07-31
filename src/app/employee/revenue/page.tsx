@@ -24,7 +24,7 @@ export default function EmployeeRevenueHistoryPage() {
 
     try {
       const dbList = await fetchRevenuesAction();
-      if (dbList && dbList.length > 0) {
+      if (dbList) {
         let sum = 0n;
         const formattedList: TransactionItem[] = [];
 
@@ -48,44 +48,10 @@ export default function EmployeeRevenueHistoryPage() {
 
         setTransactions(formattedList);
         setTotalAmount(sum);
-        return;
       }
     } catch (err) {
-      console.warn("DB employee revenue history fetch fallback:", err);
+      console.warn("DB employee revenue history fetch error:", err);
     }
-
-    const allTx = getRevenueTransactions();
-    const empTx = allTx.filter((t: StoredTransaction) => {
-      const tStaff = t.staffName.toLowerCase();
-      const tUser = (t.username || "").toLowerCase();
-
-      return (
-        (empName && tStaff.includes(empName.toLowerCase())) ||
-        (empUsername && (tStaff.includes(empUsername.toLowerCase()) || tUser.includes(empUsername.toLowerCase())))
-      );
-    });
-
-    let sum = 0n;
-    const formattedList: TransactionItem[] = empTx.map((t: StoredTransaction) => {
-      const amt = BigInt(t.amount || 0);
-      if (t.status === "recorded") {
-        sum += amt;
-      }
-
-      return {
-        id: t.id,
-        staffName: t.staffName,
-        avatarType: t.avatarType || "scissors",
-        serviceName: t.serviceName,
-        amount: amt,
-        paymentMethod: t.paymentMethod,
-        time: t.time,
-        status: t.status,
-      };
-    });
-
-    setTransactions(formattedList);
-    setTotalAmount(sum);
   };
 
   useEffect(() => {

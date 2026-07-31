@@ -36,7 +36,7 @@ export default function LoginPage() {
     const isAdminSeed2 = cleanUsername === "admin" && cleanPassword === "admin123";
 
     if (isAdminSeed1 || isAdminSeed2) {
-      const adminName = cleanUsername === "admin" ? "Quản trị viên (Admin)" : "Định Công Nhật (Admin)";
+      const adminName = cleanUsername === "admin" ? "Quản trị viên (Admin)" : "Đinh Công Nhất (Admin)";
       
       // Instantly set session and cookies
       setAuthSession({
@@ -85,7 +85,7 @@ export default function LoginPage() {
 
     // Fallback 2: Check matching username / phone keywords (e.g. nhatdc, 0383576308, dinhcongnhat)
     if (!empName && (cleanUsername.includes("nhat") || cleanUsername === "0383576308")) {
-      empName = "Định Công Nhật";
+      empName = "Đinh Công Nhất";
     }
 
     if (empName) {

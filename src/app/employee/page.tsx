@@ -41,7 +41,7 @@ export default function EmployeeDashboardPage() {
     // 1. Fetch DB revenues
     try {
       const dbEntries = await fetchRevenuesAction(currentDate);
-      if (dbEntries && dbEntries.length > 0) {
+      if (dbEntries) {
         let cCash = 0n;
         let cTransfer = 0n;
         let cMonth = 0n;
@@ -74,55 +74,10 @@ export default function EmployeeDashboardPage() {
         setTodayTotal(cCash + cTransfer);
         setMonthTotal(cMonth);
         setCutCount(count);
-        return;
       }
     } catch (err) {
-      console.warn("DB employee revenue fetch fallback:", err);
+      console.warn("DB employee revenue fetch error:", err);
     }
-
-    // 2. Local store fallback
-    const allTx = getRevenueTransactions();
-    const empTx = allTx.filter((t: StoredTransaction) => {
-      if (t.status === "voided") return false;
-      const tStaff = t.staffName.toLowerCase();
-      const tUser = (t.username || "").toLowerCase();
-
-      return (
-        (empName && tStaff.includes(empName.toLowerCase())) ||
-        (empUsername && (tStaff.includes(empUsername.toLowerCase()) || tUser.includes(empUsername.toLowerCase())))
-      );
-    });
-
-    let cCash = 0n;
-    let cTransfer = 0n;
-    let cMonth = 0n;
-    let count = 0;
-
-    const formattedList: TransactionItem[] = empTx.map((t: StoredTransaction) => {
-      const amt = BigInt(t.amount || 0);
-      cMonth += amt;
-      cCash += t.paymentMethod === "cash" ? amt : 0n;
-      cTransfer += t.paymentMethod === "bank_transfer" ? amt : 0n;
-      count += 1;
-
-      return {
-        id: t.id,
-        staffName: t.staffName,
-        avatarType: t.avatarType || "scissors",
-        serviceName: t.serviceName,
-        amount: amt,
-        paymentMethod: t.paymentMethod,
-        time: t.time,
-        status: t.status,
-      };
-    });
-
-    setTransactions(formattedList);
-    setTodayCash(cCash);
-    setTodayTransfer(cTransfer);
-    setTodayTotal(cCash + cTransfer);
-    setMonthTotal(cMonth);
-    setCutCount(count);
   };
 
   useEffect(() => {
