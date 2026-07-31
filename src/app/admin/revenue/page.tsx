@@ -55,21 +55,7 @@ export default function RevenueManagementPage() {
   };
 
   useEffect(() => {
-    const current = getDayClosingState();
-    setIsClosed(current.isClosed);
-    const unsubscribeClosing = subscribeDayClosing((state) => {
-      setIsClosed(state.isClosed);
-    });
-
     loadLatestTransactions();
-    const unsubscribeRevenue = subscribeRevenueTransactions(() => {
-      loadLatestTransactions();
-    });
-
-    return () => {
-      unsubscribeClosing();
-      unsubscribeRevenue();
-    };
   }, []);
 
   const triggerToast = (msg: string) => {
@@ -89,40 +75,29 @@ export default function RevenueManagementPage() {
   const handleVoidTx = async () => {
     if (!selectedTx || !voidReason) return;
 
-    // Void in DB
     try {
       await voidRevenueEntryAction(selectedTx.id, voidReason);
-    } catch (err) {
-      console.warn("Void DB action warning:", err);
+      await logAuditAction({
+        action: "REVENUE_VOIDED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
+      });
+
+      setShowVoidModal(false);
+      setSelectedTx(null);
+      setVoidReason("");
+      triggerToast("Đã hủy giao dịch thành công!");
+      await loadLatestTransactions();
+    } catch (err: any) {
+      console.error("Void DB action error:", err);
+      triggerToast("Lỗi hủy giao dịch: " + (err.message || ""));
     }
-
-    // Void transaction in local store
-    voidRevenueTransaction(selectedTx.id);
-
-    addAuditLog({
-      action: "REVENUE_VOIDED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
-    });
-    await logAuditAction({
-      action: "REVENUE_VOIDED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã hủy giao dịch ${formatVND(selectedTx.amount)} của ${selectedTx.staffName} (Lý do: ${voidReason})`,
-    });
-
-    setShowVoidModal(false);
-    setSelectedTx(null);
-    setVoidReason("");
-    triggerToast("Đã hủy giao dịch thành công!");
-    loadLatestTransactions();
   };
 
   const handleConfirmCloseDay = async () => {
     const targetDate = currentBusinessDate || new Date().toISOString().split("T")[0];
 
-    // Call closeDayAction in Supabase DB
     const res = await closeDayAction({
       businessDate: targetDate,
       cashTotal: Number(cashTotal),
@@ -132,25 +107,10 @@ export default function RevenueManagementPage() {
     });
 
     if (res.success) {
-      setDayClosingState(true);
-
-      // Broadcast to all open tabs (especially employee tabs) so they switch to next business day
-      try {
-        const bc = new BroadcastChannel("barbershop_day_closing_channel");
-        bc.postMessage({ type: "DAY_CLOSED", businessDate: targetDate });
-        bc.close();
-      } catch (e) {}
-
-      addAuditLog({
-        action: "DAY_CLOSED",
-        actorName: "Admin Manager",
-        actorRole: "admin",
-        details: `Đã chốt ngày ${targetDate} (Tổng: ${formatVND(totalRevenue)}, ${recordedTxs.length} giao dịch)`,
-      });
-
       setShowCloseModal(false);
       setIsClosed(true);
-      triggerToast(`Đã chốt thành công ngày ${targetDate}! Nhân viên sẽ chuyển sang ngày mới.`);
+      triggerToast(`Đã chốt thành công ngày ${targetDate}!`);
+      await loadLatestTransactions();
     } else {
       triggerToast("Lỗi chốt ngày: " + (res.error || ""));
     }

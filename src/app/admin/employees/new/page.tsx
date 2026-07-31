@@ -52,25 +52,6 @@ export default function AddEmployeePage() {
         commission_rate: parseFloat(commissionRate) || 8.0,
       });
 
-      // 2. Also save to local store fallback
-      addEmployee({
-        username: cleanUser,
-        password: password.trim(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        jobTitle,
-        baseSalary: Number(baseSalaryNum),
-        allowance: Number(allowanceNum),
-        commissionRate: parseFloat(commissionRate) || 8.0,
-      });
-
-      addAuditLog({
-        action: "STAFF_CREATED",
-        actorName: "Admin Manager",
-        actorRole: "admin",
-        details: `Đã tạo tài khoản nhân viên mới: ${fullName.trim()} (@${cleanUser})`,
-      });
-
       await logAuditAction({
         action: "STAFF_CREATED",
         actorName: "Admin Manager",
@@ -83,20 +64,8 @@ export default function AddEmployeePage() {
       setTimeout(() => router.push("/admin/employees"), 1000);
     } catch (err: any) {
       console.error("Error creating employee:", err);
-      // If Supabase auth user creation fails (e.g. duplicate email), fallback gracefully
-      addEmployee({
-        username: cleanUser,
-        password: password.trim(),
-        fullName: fullName.trim(),
-        phone: phone.trim(),
-        jobTitle,
-        baseSalary: Number(baseSalaryNum),
-        allowance: Number(allowanceNum),
-        commissionRate: parseFloat(commissionRate) || 8.0,
-      });
+      setErrorMsg("Không thể tạo nhân viên trên CSDL. Vui lòng kiểm tra lại kết nối.");
       setLoading(false);
-      setSuccess(true);
-      setTimeout(() => router.push("/admin/employees"), 1000);
     }
   };
 

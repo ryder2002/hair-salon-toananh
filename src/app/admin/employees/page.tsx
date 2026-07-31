@@ -34,12 +34,13 @@ export default function EmployeesPage() {
             createdAt: new Date().toISOString(),
           }));
           setEmployeesList(formatted);
-          return;
+        } else {
+          setEmployeesList([]);
         }
       } catch (err) {
         console.warn("DB fetch employees error:", err);
+        setEmployeesList([]);
       }
-      setEmployeesList(getEmployees());
     }
     loadData();
   }, []);

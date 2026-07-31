@@ -32,10 +32,10 @@ export default function EmployeeDetailPage() {
     async function load() {
       try {
         const dbList = await fetchEmployeesAction();
-        const foundDb = dbList.find((e: any) => e.id === id || e.email?.split("@")[0] === id);
+        const foundDb = dbList.find((e: any) => e.id === id || e.username === id || e.email?.split("@")[0] === id);
         if (foundDb) {
           setFullName(foundDb.full_name);
-          setUsername(foundDb.email?.split("@")[0] || id);
+          setUsername(foundDb.username || foundDb.email?.split("@")[0] || id);
           setJobTitle(foundDb.job_title || "Thợ cắt tóc");
           setStatus(foundDb.status || "active");
           setRawBaseSalary(String(foundDb.salary_settings?.[0]?.base_salary || 6000000));
@@ -44,23 +44,10 @@ export default function EmployeeDetailPage() {
           return;
         }
       } catch (err) {
-        console.warn("DB fetch profile fallback:", err);
+        console.warn("DB fetch profile error:", err);
       }
-
-      const employees = getEmployees();
-      const found = employees.find((e) => e.id === id || e.username === id);
-      if (found) {
-        setFullName(found.fullName);
-        setUsername(found.username);
-        setJobTitle(found.jobTitle);
-        setStatus(found.status);
-        setRawBaseSalary(String(found.baseSalary || 6000000));
-        setRawAllowance(String(found.allowance || 500000));
-        setCommissionRate(String(found.commissionRate || 8.0));
-      } else {
-        setFullName(id);
-        setUsername(id);
-      }
+      setFullName(id);
+      setUsername(id);
     }
     load();
   }, [id]);
@@ -71,12 +58,6 @@ export default function EmployeeDetailPage() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaved(true);
-    addAuditLog({
-      action: "STAFF_UPDATED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã cập nhật cấu hình lương cho nhân viên ${fullName} (@${username}) (Lương cứng: ${formatVND(baseSalaryNum)}, Phụ cấp: ${formatVND(allowanceNum)}, Hoa hồng: ${commissionRate}%)`,
-    });
     await logAuditAction({
       action: "STAFF_UPDATED",
       actorName: "Admin Manager",
@@ -95,14 +76,7 @@ export default function EmployeeDetailPage() {
     } catch (err) {
       console.warn("DB toggle status error:", err);
     }
-    toggleEmployeeStatus(id);
 
-    addAuditLog({
-      action: nextStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã ${nextStatus === "inactive" ? "khóa tài khoản" : "mở khóa tài khoản"} nhân viên ${fullName} (@${username})`,
-    });
     await logAuditAction({
       action: nextStatus === "inactive" ? "STAFF_LOCKED" : "STAFF_UNLOCKED",
       actorName: "Admin Manager",
@@ -120,14 +94,6 @@ export default function EmployeeDetailPage() {
       console.warn("DB delete employee warning:", err);
     }
 
-    deleteEmployee(id);
-
-    addAuditLog({
-      action: "STAFF_DELETED",
-      actorName: "Admin Manager",
-      actorRole: "admin",
-      details: `Đã xóa vĩnh viễn tài khoản người dùng/nhân viên ${fullName} (@${username}) khỏi hệ thống`,
-    });
     await logAuditAction({
       action: "STAFF_DELETED",
       actorName: "Admin Manager",

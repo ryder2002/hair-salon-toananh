@@ -7,7 +7,8 @@ import { MobileHeader } from "@/components/layout/MobileHeader";
 import { EmployeeBottomNav } from "@/components/layout/EmployeeBottomNav";
 
 import { getAuthSession, clearAuthSession } from "@/lib/auth";
-import { addAuditLog } from "@/lib/audit-log";
+import { changeUserPasswordAction } from "@/server/actions/employees";
+import { logAuditAction } from "@/server/actions/audit";
 
 import { BellRing } from "lucide-react";
 import { registerWebPushSubscription } from "@/lib/push/webpush";
@@ -19,6 +20,7 @@ export default function EmployeeProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(false);
   const [notifEnabled, setNotifEnabled] = useState(true);
 
   const toggleNotif = async () => {
@@ -33,7 +35,7 @@ export default function EmployeeProfilePage() {
     setTimeout(() => setMsg(""), 3000);
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
       setMsg("Mật khẩu mới phải từ 6 ký tự trở lên!");
@@ -44,14 +46,27 @@ export default function EmployeeProfilePage() {
       return;
     }
 
-    addAuditLog({
+    setLoading(true);
+    const res = await changeUserPasswordAction({
+      username: session?.username || "nhanvien",
+      oldPassword,
+      newPassword,
+    });
+
+    setLoading(false);
+    if (!res.success) {
+      setMsg("Lỗi: " + (res.error || "Không thể đổi mật khẩu"));
+      return;
+    }
+
+    await logAuditAction({
       action: "PASSWORD_CHANGED",
       actorName: session?.fullName || "Nhân viên",
       actorRole: "employee",
-      details: `Đã đổi mật khẩu tài khoản nhân viên @${session?.username} thành công`,
+      details: `Đã đổi mật khẩu tài khoản nhân viên @${session?.username} thành công trong CSDL Supabase`,
     });
 
-    setMsg("Đổi mật khẩu thành công!");
+    setMsg("Đổi mật khẩu thành công vào CSDL!");
     setOldPassword("");
     setNewPassword("");
     setConfirmPassword("");

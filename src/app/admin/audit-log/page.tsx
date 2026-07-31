@@ -15,14 +15,15 @@ export default function AuditLogPage() {
     async function loadLogs() {
       try {
         const dbLogs = await fetchAuditLogsAction();
-        if (dbLogs && dbLogs.length > 0) {
+        if (dbLogs) {
           setLogs(dbLogs as AuditLogEntry[]);
-          return;
+        } else {
+          setLogs([]);
         }
       } catch (err) {
         console.warn("DB audit log fetch error:", err);
+        setLogs([]);
       }
-      setLogs(getAuditLogs());
     }
     loadLogs();
   }, []);

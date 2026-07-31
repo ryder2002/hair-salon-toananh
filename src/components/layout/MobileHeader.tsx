@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Bell, X, CheckCircle, BellOff } from "lucide-react";
 import { getNotifications, subscribeNotifications, markAllNotificationsAsRead, AppNotification } from "@/lib/notification-store";
+import { fetchNotificationsAction, fetchUnreadNotificationCountAction } from "@/server/actions/notifications";
 import { getAuthSession } from "@/lib/auth";
 
 interface MobileHeaderProps {
@@ -28,16 +29,30 @@ export function MobileHeader({
       setRole(session.role);
     }
 
-    const notifs = getNotifications();
-    setNotifications(notifs);
-    setUnreadCount(notifs.filter((n) => !n.isRead).length);
+    async function loadNotifs() {
+      try {
+        const count = await fetchUnreadNotificationCountAction();
+        setUnreadCount(count);
+        const data = await fetchNotificationsAction();
+        if (data) {
+          setNotifications(
+            data.map((n: any) => ({
+              id: n.id,
+              title: n.title,
+              message: n.message,
+              type: n.type || "system",
+              isRead: !!n.read_at,
+              timestamp: new Date(n.created_at).toLocaleString("vi-VN"),
+              url: n.data?.url || "/admin/revenue",
+            }))
+          );
+        }
+      } catch (e) {
+        console.warn("DB notifications fetch error:", e);
+      }
+    }
 
-    const unsubscribe = subscribeNotifications((updated) => {
-      setNotifications(updated);
-      setUnreadCount(updated.filter((n) => !n.isRead).length);
-    });
-
-    return () => unsubscribe();
+    loadNotifs();
   }, []);
 
   const homeHref = role === "admin" ? "/admin" : "/employee";

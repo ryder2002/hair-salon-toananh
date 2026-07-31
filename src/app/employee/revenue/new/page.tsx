@@ -56,23 +56,8 @@ export default function RecordRevenuePage() {
     const actorName = currentSession?.fullName || "Nhân viên";
     const targetDate = businessDate || getVietnamBusinessDate();
 
-    // Call persistent revenue store with Anti-Spam check & real-time notification
-    const res = addRevenueTransaction({
-      staffName: actorName,
-      username: currentSession?.username,
-      serviceName: serviceName || "Dịch vụ tóc",
-      amount: Number(numericAmount),
-      paymentMethod,
-    });
-
-    if (!res.success) {
-      setErrorMsg(res.error || "Thao tác quá nhanh!");
-      return;
-    }
-
     setLoading(true);
 
-    // Also sync to Supabase Database & notify Admin profiles
     try {
       const idempotencyKey = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
       await createRevenueEntryAction({
@@ -83,15 +68,15 @@ export default function RecordRevenuePage() {
         business_date: targetDate,
         idempotency_key: idempotencyKey,
       });
-    } catch (err) {
-      console.warn("Database revenue entry sync:", err);
-    }
 
-    setTimeout(() => {
       setLoading(false);
       setSuccess(true);
       setTimeout(() => router.push("/employee"), 1000);
-    }, 400);
+    } catch (err: any) {
+      console.error("Database revenue entry sync:", err);
+      setErrorMsg("Không thể lưu đơn hàng vào CSDL. Vui lòng kiểm tra lại kết nối.");
+      setLoading(false);
+    }
   };
 
   return (

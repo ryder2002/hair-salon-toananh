@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:all": "node scripts/test-all-features.js"
+    "test:all": "node scripts/test-all-features.js",
+    "test:db": "node scripts/test-supabase-db-flow.js"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

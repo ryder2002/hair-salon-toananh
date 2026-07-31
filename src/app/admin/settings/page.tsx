@@ -7,7 +7,8 @@ import { BellRing, Shield, FileText, Store, LogOut, ChevronRight, CheckCircle2 }
 import { MobileHeader } from "@/components/layout/MobileHeader";
 import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { clearAuthSession } from "@/lib/auth";
-import { addAuditLog } from "@/lib/audit-log";
+import { changeUserPasswordAction } from "@/server/actions/employees";
+import { logAuditAction } from "@/server/actions/audit";
 
 import { registerWebPushSubscription } from "@/lib/push/webpush";
 import { clearAllDatabaseDataAction } from "@/server/actions/reset";
@@ -38,14 +39,10 @@ export default function AdminSettingsPage() {
     setTimeout(() => setMsg(""), 3000);
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPassError("");
 
-    if (oldPassword !== "admin123" && oldPassword !== "10122002") {
-      setPassError("Mật khẩu hiện tại không đúng!");
-      return;
-    }
     if (newPassword.length < 6) {
       setPassError("Mật khẩu mới phải từ 6 ký tự trở lên!");
       return;
@@ -55,14 +52,25 @@ export default function AdminSettingsPage() {
       return;
     }
 
-    addAuditLog({
+    const res = await changeUserPasswordAction({
+      username: "admin",
+      oldPassword,
+      newPassword,
+    });
+
+    if (!res.success) {
+      setPassError(res.error || "Không thể cập nhật mật khẩu!");
+      return;
+    }
+
+    await logAuditAction({
       action: "PASSWORD_CHANGED",
       actorName: "Đinh Công Nhất",
       actorRole: "admin",
-      details: "Đã đổi mật khẩu tài khoản Admin thành công",
+      details: "Đã đổi mật khẩu tài khoản Admin thành công trong CSDL Supabase",
     });
 
-    setMsg("Đã đổi mật khẩu Admin thành công!");
+    setMsg("Đã đổi mật khẩu Admin thành công trong CSDL!");
     setShowPasswordModal(false);
     setOldPassword("");
     setNewPassword("");
@@ -71,12 +79,12 @@ export default function AdminSettingsPage() {
   };
 
   const handleLogout = () => {
-    addAuditLog({
+    logAuditAction({
       action: "USER_LOGOUT",
       actorName: "Admin Manager",
       actorRole: "admin",
       details: "Đã đăng xuất khỏi tài khoản Admin",
-    });
+    }).catch(() => {});
     clearAuthSession();
     router.push("/login");
   };
