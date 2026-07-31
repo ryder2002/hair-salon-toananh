@@ -32,10 +32,10 @@ export default function EmployeeDetailPage() {
     async function load() {
       try {
         const dbList = await fetchEmployeesAction();
-        const foundDb = dbList.find((e: any) => e.id === id || e.username === id || e.email?.split("@")[0] === id);
+        const foundDb = dbList.find((e: any) => e.id === id || e.email?.split("@")[0] === id);
         if (foundDb) {
           setFullName(foundDb.full_name);
-          setUsername(foundDb.username || foundDb.email?.split("@")[0] || id);
+          setUsername((foundDb.email || "").split("@")[0] || id);
           setJobTitle(foundDb.job_title || "Thợ cắt tóc");
           setStatus(foundDb.status || "active");
           setRawBaseSalary(String(foundDb.salary_settings?.[0]?.base_salary || 6000000));

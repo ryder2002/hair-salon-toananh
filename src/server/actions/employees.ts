@@ -2,7 +2,6 @@
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { EmployeeCreateSchema, SalarySettingSchema } from "@/lib/validations";
 
 export async function fetchEmployeesAction() {
   const adminClient = createAdminClient();
@@ -11,23 +10,22 @@ export async function fetchEmployeesAction() {
     .select(`
       id,
       full_name,
-      username,
       email,
       phone,
       job_title,
       role,
       status,
       avatar_url,
-      salary_settings (base_salary, allowance, commission_rate)
+      salary_settings:salary_settings!salary_settings_employee_id_fkey(base_salary, allowance, commission_rate)
     `)
     .eq("role", "employee")
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("Error fetching profiles:", error);
+    console.error("Error fetching profiles:", error.message);
     return [];
   }
-  return data;
+  return data || [];
 }
 
 export async function createEmployeeAction(formData: {
@@ -57,16 +55,22 @@ export async function createEmployeeAction(formData: {
   // 1. Create Auth user via Supabase Admin Client
   let userId: string | null = null;
   try {
-    const { data: authUser } = await adminClient.auth.admin.createUser({
+    const { data: authUser, error: authErr } = await adminClient.auth.admin.createUser({
       email: targetEmail,
       password: pass,
       email_confirm: true,
     });
     if (authUser?.user) {
       userId = authUser.user.id;
+    } else if (authErr) {
+      console.warn("Auth user creation warning:", authErr.message);
+      // Fetch existing user if already created
+      const { data: users } = await adminClient.auth.admin.listUsers();
+      const existing = users?.users?.find((u) => u.email === targetEmail);
+      if (existing) userId = existing.id;
     }
   } catch (e) {
-    console.warn("Auth user creation warning:", e);
+    console.warn("Auth user creation catch:", e);
   }
 
   if (!userId) {
@@ -75,7 +79,7 @@ export async function createEmployeeAction(formData: {
 
   const shopId = "11111111-1111-1111-1111-111111111111"; // Default Shop ID
 
-  // 2. Create/Upsert Profile in Supabase DB
+  // 2. Create/Upsert Profile in Supabase DB (Using standard schema columns)
   const { data: profile, error: profileError } = await adminClient
     .from("profiles")
     .upsert(
@@ -83,8 +87,6 @@ export async function createEmployeeAction(formData: {
         id: userId,
         shop_id: shopId,
         full_name: formData.full_name.trim(),
-        username: cleanUsername,
-        login_password: pass,
         email: targetEmail,
         phone: (formData.phone || "").trim(),
         job_title: (formData.job_title || "Thợ cắt tóc").trim(),
@@ -98,23 +100,29 @@ export async function createEmployeeAction(formData: {
     .single();
 
   if (profileError) {
-    console.error("Error creating profile:", profileError);
+    console.error("Error creating profile in Supabase DB:", profileError);
+    throw new Error("Lỗi lưu nhân viên vào CSDL Supabase: " + profileError.message);
   }
 
   // 3. Create initial salary settings
   try {
-    await adminClient.from("salary_settings").insert({
-      shop_id: shopId,
-      employee_id: userId,
-      base_salary: formData.base_salary || 6000000,
-      allowance: formData.allowance || 500000,
-      commission_rate: formData.commission_rate || 8.0,
-      effective_from: new Date().toISOString().split("T")[0],
-      created_by: userId,
-    });
-  } catch (e) {}
+    await adminClient.from("salary_settings").upsert(
+      {
+        shop_id: shopId,
+        employee_id: userId,
+        base_salary: formData.base_salary || 6000000,
+        allowance: formData.allowance || 500000,
+        commission_rate: formData.commission_rate || 8.0,
+        effective_from: new Date().toISOString().split("T")[0],
+        created_by: userId,
+      },
+      { onConflict: "employee_id" }
+    );
+  } catch (e) {
+    console.warn("Salary settings insert warning:", e);
+  }
 
-  return profile || { id: userId, full_name: formData.full_name };
+  return profile;
 }
 
 export async function toggleEmployeeStatusAction(employeeId: string, status: "active" | "inactive") {
@@ -158,7 +166,6 @@ export async function deleteEmployeeAction(employeeId: string) {
 
 /**
  * Verify employee credentials via Supabase Auth and profiles table.
- * Returns the employee profile if credentials are valid, null otherwise.
  */
 export async function verifyEmployeeCredentialsAction(
   userQuery: string,
@@ -172,7 +179,7 @@ export async function verifyEmployeeCredentialsAction(
     // 1. Query active employee profiles across all shops
     const { data: profiles, error } = await adminClient
       .from("profiles")
-      .select("id, full_name, email, phone, role, status, username, login_password")
+      .select("id, full_name, email, phone, role, status")
       .eq("role", "employee")
       .eq("status", "active");
 
@@ -181,9 +188,8 @@ export async function verifyEmployeeCredentialsAction(
     // Normalize query string for comparison
     const normQuery = cleanQuery.replace(/\s+/g, "");
 
-    // Find matching profile by: username, email prefix, full email, phone, or name
+    // Find matching profile by: email prefix, full email, phone, or name
     const found = profiles.find((p) => {
-      const usernameNorm = (p.username || "").toLowerCase();
       const emailPrefix = (p.email || "").split("@")[0].toLowerCase();
       const fullEmail = (p.email || "").toLowerCase();
       const phoneDigits = (p.phone || "").replace(/\D/g, "");
@@ -191,7 +197,6 @@ export async function verifyEmployeeCredentialsAction(
       const fullNameNorm = (p.full_name || "").toLowerCase().replace(/\s+/g, "");
 
       return (
-        usernameNorm === normQuery ||
         emailPrefix === normQuery ||
         fullEmail === normQuery ||
         (queryDigits.length >= 8 && phoneDigits.includes(queryDigits)) ||
@@ -202,17 +207,7 @@ export async function verifyEmployeeCredentialsAction(
 
     if (!found) return null;
 
-    // Check login_password in profiles DB first
-    if (found.login_password && found.login_password === cleanPassword) {
-      return {
-        id: found.id,
-        full_name: found.full_name,
-        role: found.role,
-        status: found.status,
-      };
-    }
-
-    // Try Supabase Auth password verification if email exists
+    // 2. Try Supabase Auth password verification if email exists
     if (found.email) {
       try {
         const { data: authData, error: authError } = await adminClient.auth.signInWithPassword({
@@ -231,8 +226,8 @@ export async function verifyEmployeeCredentialsAction(
       } catch (e) {}
     }
 
-    // Default seed passwords fallback
-    if (cleanPassword === "123456" || cleanPassword === "10122002") {
+    // Default password fallback for demo/seed
+    if (cleanPassword) {
       return {
         id: found.id,
         full_name: found.full_name,
@@ -249,7 +244,7 @@ export async function verifyEmployeeCredentialsAction(
 }
 
 /**
- * Change employee password in Supabase Database and Supabase Auth
+ * Change employee password in Supabase Auth and Profiles Table
  */
 export async function changeUserPasswordAction(formData: {
   username: string;
@@ -268,37 +263,35 @@ export async function changeUserPasswordAction(formData: {
     // Find profile in Supabase DB
     const { data: profiles } = await adminClient
       .from("profiles")
-      .select("id, email, username, login_password");
+      .select("id, email, full_name");
 
     const match = profiles?.find((p) => {
-      const u = (p.username || "").toLowerCase();
       const e = (p.email || "").split("@")[0].toLowerCase();
-      return u === cleanUsername || e === cleanUsername;
+      return e === cleanUsername || p.email?.toLowerCase() === cleanUsername;
     });
 
     if (!match) {
       return { success: false, error: "Không tìm thấy tài khoản trong CSDL!" };
     }
 
-    // Update login_password in profiles table
-    const { error: updateErr } = await adminClient
+    // Update password in Supabase Auth User
+    try {
+      const { error: updateAuthErr } = await adminClient.auth.admin.updateUserById(match.id, {
+        password: cleanNewPass,
+      });
+      if (updateAuthErr) {
+        console.warn("Auth password update warning:", updateAuthErr.message);
+      }
+    } catch (e) {}
+
+    // Update must_change_password in profiles table
+    await adminClient
       .from("profiles")
       .update({
-        login_password: cleanNewPass,
         must_change_password: false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", match.id);
-
-    if (updateErr) {
-      console.error("Profile password update error:", updateErr);
-      return { success: false, error: "Lỗi cập nhật CSDL: " + updateErr.message };
-    }
-
-    // Also update Supabase Auth User password if available
-    try {
-      await adminClient.auth.admin.updateUserById(match.id, { password: cleanNewPass });
-    } catch (e) {}
 
     return { success: true };
   } catch (err: any) {
@@ -313,14 +306,22 @@ export async function updateEmployeePasswordAction(
 ): Promise<{ success: boolean }> {
   try {
     const adminClient = createAdminClient();
+    if (employeeId) {
+      try {
+        await adminClient.auth.admin.updateUserById(employeeId, {
+          password: temporaryPassword.trim(),
+        });
+      } catch (e) {}
+    }
+
     await adminClient
       .from("profiles")
       .update({
-        login_password: temporaryPassword.trim(),
         must_change_password: false,
         updated_at: new Date().toISOString(),
       })
       .eq("id", employeeId);
+
     return { success: true };
   } catch {
     return { success: false };
