@@ -21,7 +21,7 @@ export async function sendWebPushNotificationToAllAction(title: string, body: st
 }
 
 export async function sendWebPushNotificationToUsersAction(userIds: string[], title: string, body: string, url?: string) {
-  await requireAdmin();
+  await requireActiveProfile();
   const admin = createAdminClient();
   const { data: subscriptions } = await admin.from("push_subscriptions").select("id, user_id, endpoint, p256dh, auth").in("user_id", userIds);
   return sendToSubscriptions(admin, subscriptions || [], title, body, url);

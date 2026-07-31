@@ -4,6 +4,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { requireActiveProfile, requireAdmin } from "@/lib/supabase/authz";
 import { RevenueEntrySchema } from "@/lib/validations";
 
+import { sendWebPushNotificationToUsersAction } from "@/server/actions/push";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
 export async function getAdminDashboardDataAction() {
@@ -234,22 +235,45 @@ export async function createRevenueEntryAction(formData: {
   });
   if (error) throw new Error(error.message);
 
-  // Notifications are written only after the authoritative insert succeeds.
+  // Notifications are written and pushed after the authoritative insert succeeds.
   const row = data as any;
   if (profile.role !== "admin") {
     let admin;
-    try { admin = createAdminClient(); } catch (error) { console.warn("Revenue saved; notification client unavailable", error); return row; }
-    const { data: admins } = await admin.from("profiles").select("id").eq("shop_id", profile.shop_id).eq("role", "admin").eq("status", "active");
+    try {
+      admin = createAdminClient();
+    } catch (error) {
+      console.warn("Revenue saved; notification client unavailable", error);
+      return row;
+    }
+    const { data: admins } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("shop_id", profile.shop_id)
+      .eq("role", "admin")
+      .eq("status", "active");
+
     if (admins?.length) {
-      const { error: notificationError } = await admin.from("notifications").insert(admins.map((adminProfile) => ({
-        shop_id: profile.shop_id,
-        recipient_id: adminProfile.id,
-        type: "REVENUE_RECORDED",
-        title: "Nhân viên ghi nhận doanh thu mới",
-        message: `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ`,
-        data: { url: "/admin/revenue", revenue_id: row?.id || null },
-      })));
+      const adminIds = admins.map((a: any) => a.id);
+      const title = "Nhân viên ghi nhận doanh thu mới";
+      const message = `${profile.full_name} vừa ghi nhận ${validated.amount.toLocaleString("vi-VN")} đ (${validated.service_name || "Dịch vụ tóc"})`;
+
+      const { error: notificationError } = await admin.from("notifications").insert(
+        adminIds.map((adminId: string) => ({
+          shop_id: profile.shop_id,
+          recipient_id: adminId,
+          type: "REVENUE_RECORDED",
+          title,
+          message,
+          data: { url: "/admin/revenue", revenue_id: row?.id || null },
+        }))
+      );
       if (notificationError) console.warn("Revenue saved; notification insert failed", notificationError.message);
+
+      try {
+        await sendWebPushNotificationToUsersAction(adminIds, title, message, "/admin/revenue");
+      } catch (pushErr) {
+        console.warn("Revenue saved; Web Push delivery notice:", pushErr);
+      }
     }
   }
   return row;
