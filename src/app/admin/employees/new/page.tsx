@@ -143,23 +143,37 @@ export default function AddEmployeePage() {
                 </div>
               </div>
 
-              <div className="space-y-1">
+              <div className="space-y-1.5">
                 <label className="block text-xs font-semibold text-[rgba(23,23,23,0.7)]">
-                  Chức vụ
+                  Chức vụ công việc *
                 </label>
                 <div className="relative">
                   <Briefcase className="w-4 h-4 text-[rgba(23,23,23,0.4)] absolute left-3 top-3" />
-                  <select
+                  <input
+                    type="text"
                     value={jobTitle}
                     onChange={(e) => setJobTitle(e.target.value)}
+                    placeholder="Gõ hoặc chọn chức vụ (Ví dụ: Thợ gội đầu, Lễ tân...)"
+                    required
                     className="w-full bg-[#F7F3EC]/50 border border-[rgba(23,23,23,0.14)] rounded-[10px] pl-9 pr-3 py-2.5 text-sm text-[#171717] focus:outline-none focus:border-[#741F2C]"
-                  >
-                    <option value="Thợ cắt tóc">Thợ cắt tóc</option>
-                    <option value="Thợ chính">Thợ chính</option>
-                    <option value="Thợ phụ">Thợ phụ</option>
-                    <option value="Quản lý">Quản lý tiệm</option>
-                    <option value="Thực tập">Thực tập</option>
-                  </select>
+                  />
+                </div>
+                {/* Quick Job Title Choice Chips */}
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {["Thợ cắt tóc", "Thợ gội đầu", "Gội đầu & Massage", "Thợ phụ", "Lễ tân", "Quản lý tiệm"].map((title) => (
+                    <button
+                      key={title}
+                      type="button"
+                      onClick={() => setJobTitle(title)}
+                      className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                        jobTitle === title
+                          ? "bg-[#741F2C] text-white border-[#741F2C]"
+                          : "bg-white text-[rgba(23,23,23,0.7)] border-[rgba(23,23,23,0.14)] hover:bg-gray-50"
+                      }`}
+                    >
+                      + {title}
+                    </button>
+                  ))}
                 </div>
               </div>
 

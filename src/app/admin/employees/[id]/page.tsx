@@ -161,16 +161,33 @@ export default function EmployeeDetailPage() {
             CẤU HÌNH LƯƠNG NHÂN VIÊN
           </h3>
 
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             <label className="block text-xs font-semibold text-[rgba(23,23,23,0.7)]">
-              Chức vụ
+              Chức vụ công việc
             </label>
             <input
               type="text"
               value={jobTitle}
               onChange={(e) => setJobTitle(e.target.value)}
+              placeholder="Nhập hoặc chọn chức vụ (Ví dụ: Thợ gội đầu, Lễ tân...)"
               className="w-full bg-[#F7F3EC]/50 border border-[rgba(23,23,23,0.14)] rounded-[10px] px-3.5 py-2.5 text-sm text-[#171717] focus:outline-none focus:border-[#741F2C]"
             />
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {["Thợ cắt tóc", "Thợ gội đầu", "Gội đầu & Massage", "Thợ phụ", "Lễ tân", "Quản lý tiệm"].map((title) => (
+                <button
+                  key={title}
+                  type="button"
+                  onClick={() => setJobTitle(title)}
+                  className={`px-2 py-0.5 rounded-full text-[11px] font-semibold border transition-colors ${
+                    jobTitle === title
+                      ? "bg-[#741F2C] text-white border-[#741F2C]"
+                      : "bg-white text-[rgba(23,23,23,0.7)] border-[rgba(23,23,23,0.14)] hover:bg-gray-50"
+                  }`}
+                >
+                  + {title}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="space-y-1">

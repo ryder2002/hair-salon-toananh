@@ -158,15 +158,15 @@ async function runAllTests() {
       fail("Clean Slate Employees Check", `Expected 0 items, got ${initialList.length}`);
     }
 
-    // Test Creating Employee with Username
+    // Test Creating Employee with Custom Job Title ("Thợ gội đầu")
     const newEmp = {
       id: "emp_test_1",
-      username: "hoanglong",
+      username: "goidau_ha",
       password: "123",
-      fullName: "Hoàng Long",
-      phone: "0912345678",
-      jobTitle: "Thợ cắt tóc",
-      baseSalary: 7000000,
+      fullName: "Lê Thu Hà",
+      phone: "0988776655",
+      jobTitle: "Thợ gội đầu",
+      baseSalary: 6500000,
       allowance: 500000,
       commissionRate: 8.0,
       status: "active",
@@ -178,18 +178,31 @@ async function runAllTests() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedEmps));
 
     const savedEmps = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (savedEmps.length === 1 && savedEmps[0].username === "hoanglong") {
-      pass("Tạo tài khoản nhân viên mới thành công", `FullName: ${savedEmps[0].fullName}, Username: @${savedEmps[0].username}`);
+    if (savedEmps.length === 1 && savedEmps[0].jobTitle === "Thợ gội đầu") {
+      pass("Tạo tài khoản nhân viên với chức vụ tùy chỉnh (Thợ gội đầu)", `FullName: ${savedEmps[0].fullName}, Job: ${savedEmps[0].jobTitle}`);
     } else {
       fail("Create Employee Test", "Employee failed to save properly");
     }
 
-    // Test Employee Auth Verification
-    const loginEmp = savedEmps.find((e) => e.username === "hoanglong" && e.password === "123");
-    if (loginEmp) {
-      pass("Đăng nhập tài khoản nhân viên mới vừa tạo", `Role: employee, User: @${loginEmp.username}`);
+    // Test Employee Auth Verification with @ prefix & phone number
+    const norm = (str) => str.replace(/^@/, "").trim().toLowerCase();
+
+    // Query 1: User typed @goidau_ha
+    const queryWithAt = "@goidau_ha";
+    const loginWithAt = savedEmps.find((e) => norm(e.username) === norm(queryWithAt) && e.password === "123");
+    if (loginWithAt) {
+      pass("Đăng nhập thành công khi gõ kèm ký tự @ (@goidau_ha)", `Matched User: ${loginWithAt.fullName}`);
     } else {
-      fail("Employee login verification", "Failed to verify newly created employee login");
+      fail("Login with @ check", "Failed to normalize @ prefix during login");
+    }
+
+    // Query 2: User typed phone number 0988776655
+    const queryPhone = "0988776655";
+    const loginWithPhone = savedEmps.find((e) => e.phone === queryPhone && e.password === "123");
+    if (loginWithPhone) {
+      pass("Đăng nhập thành công bằng Số điện thoại (0988776655)", `Matched User: ${loginWithPhone.fullName}`);
+    } else {
+      fail("Login with Phone check", "Failed to login with phone number");
     }
 
     // Test Deleting Employee
