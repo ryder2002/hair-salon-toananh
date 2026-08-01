@@ -8,13 +8,13 @@ import { AdminBottomNav } from "@/components/layout/AdminBottomNav";
 import { KpiCardsRow } from "@/components/ui/KpiCardsRow";
 import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentTransactionsList";
 import { formatVND, parseVNDInput } from "@/lib/money";
-import { fetchRevenuesAction, voidRevenueEntryAction, updateRevenueEntryAction } from "@/server/actions/revenue";
-import { fetchEmployeesAction } from "@/server/actions/employees";
-import { closeDayAction, reopenDayAction, getCurrentBusinessDateAction, isDayClosedAction } from "@/server/actions/day-closing";
+import { getRevenuePageDataAction, voidRevenueEntryAction, updateRevenueEntryAction } from "@/server/actions/revenue";
+import { closeDayAction, reopenDayAction } from "@/server/actions/day-closing";
 import { logAuditAction } from "@/server/actions/audit";
 import { getVietnamBusinessDate } from "@/lib/dates";
 
 import { subscribeRealtime } from "@/lib/realtime";
+import { withClientCache, invalidateClientCache } from "@/lib/cache";
 
 export default function RevenueManagementPage() {
   const [timeFilter, setTimeFilter] = useState<"today" | "week" | "month" | "all">("today");
@@ -37,20 +37,11 @@ export default function RevenueManagementPage() {
   const loadData = async () => {
     setDataReady(false);
     try {
-      const date = await getCurrentBusinessDateAction();
-      setCurrentBusinessDate(date);
-
-      const dbClosed = await isDayClosedAction(date);
-      setIsClosed(dbClosed);
-
-      // Fetch all revenues and employees from Supabase DB
-      const [dbData, emps] = await Promise.all([
-        fetchRevenuesAction(),
-        fetchEmployeesAction(),
-      ]);
-
-      if (dbData) setAllDbEntries(dbData);
-      if (emps) setEmployeesList(emps);
+      const data = await withClientCache("admin-revenue", () => getRevenuePageDataAction(), 60000);
+      setCurrentBusinessDate(data.businessDate);
+      setIsClosed(data.isClosed);
+      setAllDbEntries(data.revenues);
+      setEmployeesList(data.employees);
       setDataReady(true);
     } catch (err) {
       console.warn("DB revenue fetch error:", err);
@@ -60,8 +51,11 @@ export default function RevenueManagementPage() {
 
   useEffect(() => {
     loadData();
-    const unsub = subscribeRealtime(() => { loadData(); });
-    const interval = window.setInterval(() => loadData(), 30000);
+    const unsub = subscribeRealtime(() => {
+      invalidateClientCache("admin-revenue");
+      void loadData();
+    });
+    const interval = window.setInterval(() => { void loadData(); }, 30000);
     return () => { unsub(); window.clearInterval(interval); };
   }, []);
 

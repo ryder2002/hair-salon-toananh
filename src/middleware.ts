@@ -18,8 +18,8 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data } = await supabase.auth.getUser();
-  const user = data.user;
+  const { data } = await supabase.auth.getSession();
+  const user = data.session?.user;
   const { pathname } = request.nextUrl;
   const protectedRoute = pathname.startsWith("/admin") || pathname.startsWith("/employee");
 

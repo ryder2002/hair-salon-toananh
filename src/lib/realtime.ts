@@ -10,53 +10,44 @@ export function initRealtimeSync() {
   initializing = true;
   const supabase = createClient();
 
-  supabase.auth.getUser().then(({ data }) => {
+  let timeout: any = null;
+  const dispatch = (payload: any) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      subscribers.forEach((cb) => {
+        try { cb(payload); } catch (e) { console.error("Realtime error", e); }
+      });
+    }, 1500); // Debounce rapidly firing events
+  };
+
+  supabase.auth.getSession().then(({ data }) => {
     initializing = false;
-    if (!data.user || realtimeChannel) return;
+    const user = data.session?.user;
+    if (!user || realtimeChannel) return;
 
     realtimeChannel = supabase
-      .channel(`app-realtime-sync-${data.user.id}`)
+      .channel(`app-realtime-sync-${user.id}`)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "revenue_entries" },
-        (payload) => {
-          subscribers.forEach((cb) => {
-            try { cb(payload); } catch (e) { console.error("Realtime error", e); }
-          });
-        }
+        (payload) => dispatch(payload)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "daily_closings" },
-        (payload) => {
-          subscribers.forEach((cb) => {
-            try { cb(payload); } catch (e) { console.error("Realtime error", e); }
-          });
-        }
+        (payload) => dispatch(payload)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "notifications" },
-        (payload) => {
-          subscribers.forEach((cb) => {
-            try { cb(payload); } catch (e) { console.error("Realtime error", e); }
-          });
-        }
+        (payload) => dispatch(payload)
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "payrolls" },
-        (payload) => {
-          subscribers.forEach((cb) => {
-            try { cb(payload); } catch (e) { console.error("Realtime error", e); }
-          });
-        }
+        (payload) => dispatch(payload)
       )
-      .on("broadcast", { event: "invalidate" }, (payload) => {
-        subscribers.forEach((cb) => {
-          try { cb(payload); } catch (e) { console.error("Realtime error", e); }
-        });
-      })
+      .on("broadcast", { event: "invalidate" }, (payload) => dispatch(payload))
       .subscribe((status) => {
         console.log("[REALTIME] WebSocket subscription status:", status);
       });

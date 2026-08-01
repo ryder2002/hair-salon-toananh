@@ -10,6 +10,7 @@ import { formatVND } from "@/lib/money";
 import { subscribeRealtime } from "@/lib/realtime";
 import { getEmployeeDashboardDataAction } from "@/server/actions/revenue";
 import { syncOfflineRevenues } from "@/lib/offline/sync";
+import { withClientCache, invalidateClientCache } from "@/lib/cache";
 
 export default function EmployeeDashboardPage() {
   const [transactions, setTransactions] = useState<TransactionItem[]>([]);
@@ -24,7 +25,7 @@ export default function EmployeeDashboardPage() {
 
   const loadEmployeeData = async () => {
     try {
-      const data = await getEmployeeDashboardDataAction();
+      const data = await withClientCache("emp-dashboard", () => getEmployeeDashboardDataAction(), 60000);
       setBusinessDate(data.businessDate);
       setTodayCash(BigInt(data.todayCash || "0"));
       setTodayTransfer(BigInt(data.todayTransfer || "0"));
@@ -49,6 +50,7 @@ export default function EmployeeDashboardPage() {
     void syncOfflineRevenues();
     loadEmployeeData();
     const unsubscribe = subscribeRealtime(() => {
+      invalidateClientCache("emp-dashboard");
       void loadEmployeeData();
     });
     const interval = window.setInterval(() => {

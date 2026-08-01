@@ -15,9 +15,9 @@ export type AuthorizedProfile = {
 
 export const requireUser = cache(async () => {
   const supabase = await createServerSupabaseClient();
-  const { data, error } = await supabase.auth.getUser();
-  if (error || !data.user) throw new Error("UNAUTHORIZED");
-  return { supabase, user: data.user };
+  const { data, error } = await supabase.auth.getSession();
+  if (error || !data.session?.user) throw new Error("UNAUTHORIZED");
+  return { supabase, user: data.session.user };
 });
 
 export const requireActiveProfile = cache(async () => {

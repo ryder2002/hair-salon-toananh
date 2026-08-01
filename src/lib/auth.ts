@@ -26,13 +26,13 @@ export async function loadAuthSession(): Promise<UserSession | null> {
   if (typeof window === "undefined") return null;
 
   const supabase = createClient();
-  const { data: auth } = await supabase.auth.getUser();
-  if (!auth.user) return null;
+  const { data: auth } = await supabase.auth.getSession();
+  if (!auth.session?.user) return null;
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("id, username, full_name, email, role, must_change_password")
-    .eq("id", auth.user.id)
+    .eq("id", auth.session.user.id)
     .eq("status", "active")
     .maybeSingle();
 
@@ -42,7 +42,7 @@ export async function loadAuthSession(): Promise<UserSession | null> {
     username: profile.username || profile.email?.split("@")[0] || "",
     fullName: profile.full_name,
     role: profile.role,
-    email: profile.email || auth.user.email || undefined,
+    email: profile.email || auth.session?.user?.email || undefined,
     mustChangePassword: profile.must_change_password,
   };
   return memorySession;

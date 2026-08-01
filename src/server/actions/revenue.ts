@@ -213,6 +213,40 @@ export async function fetchRevenuesAction(date?: string) {
   return data || [];
 }
 
+export async function getRevenuePageDataAction(dateStr?: string) {
+  const { profile, supabase } = await requireActiveProfile();
+  const date = dateStr || getVietnamBusinessDate();
+
+  const [closingRes, revRes, empRes] = await Promise.all([
+    supabase.from("daily_closings").select("is_closed").eq("shop_id", profile.shop_id).eq("business_date", date).maybeSingle(),
+    supabase.from("revenue_entries")
+      .select("id, amount, payment_method, service_name, note, business_date, performed_at, status, employee_id, created_by, profiles:employee_id(full_name, avatar_url)")
+      .eq("shop_id", profile.shop_id)
+      .order("performed_at", { ascending: false })
+      .limit(500),
+    profile.role === "admin" ? supabase
+      .from("profiles")
+      .select("id, full_name, email, username, phone, job_title, role, status, avatar_url, created_at")
+      .eq("role", "employee")
+      .order("created_at", { ascending: false }) : Promise.resolve({ data: [], error: null })
+  ]);
+
+  if (revRes.error) throw new Error(revRes.error.message);
+  if (empRes.error) throw new Error(empRes.error.message);
+
+  let revenues = revRes.data || [];
+  if (profile.role !== "admin") {
+    revenues = revenues.filter((r) => r.employee_id === profile.id);
+  }
+
+  return {
+    businessDate: date,
+    isClosed: closingRes.data?.is_closed === true,
+    revenues,
+    employees: empRes.data || [],
+  };
+}
+
 export async function createRevenueEntryAction(formData: {
   employee_id?: string;
   amount: number;
@@ -224,6 +258,18 @@ export async function createRevenueEntryAction(formData: {
 }) {
   const { profile, supabase } = await requireActiveProfile();
   const validated = RevenueEntrySchema.parse(formData);
+
+  const { data: closing } = await supabase
+    .from("daily_closings")
+    .select("is_closed")
+    .eq("shop_id", profile.shop_id)
+    .eq("business_date", validated.business_date)
+    .maybeSingle();
+
+  if (closing?.is_closed) {
+    throw new Error(`Admin đã chốt doanh thu ngày ${validated.business_date}. Bạn không thể ghi thêm sổ vào ngày này.`);
+  }
+
   const { data, error } = await supabase.rpc("record_revenue", {
     p_business_date: validated.business_date,
     p_amount: validated.amount,
@@ -282,12 +328,25 @@ export async function createRevenueEntryAction(formData: {
 }
 
 export async function voidRevenueEntryAction(revenueId: string, voidReason?: string) {
-  const { profile, supabase } = await requireAdmin();
-  if (!voidReason || voidReason.trim().length < 3) throw new Error("A void reason is required");
-  const { data, error } = await supabase.from("revenue_entries")
+  const { profile, supabase } = await requireActiveProfile();
+  if (!voidReason || voidReason.trim().length < 3) throw new Error("Vui lòng nhập lý do hủy");
+
+  const { data: existing, error: existingError } = await supabase.from("revenue_entries").select("business_date, employee_id").eq("id", revenueId).eq("shop_id", profile.shop_id).single();
+  if (existingError) throw new Error(existingError.message);
+
+  if (profile.role !== "admin" && existing.employee_id !== profile.id) {
+    throw new Error("FORBIDDEN");
+  }
+
+  const { data: closing } = await supabase.from("daily_closings").select("is_closed").eq("shop_id", profile.shop_id).eq("business_date", existing.business_date).eq("is_closed", true).maybeSingle();
+  if (closing) throw new Error(`Admin đã chốt doanh thu ngày ${existing.business_date}. Bạn không thể hủy đơn vào ngày này.`);
+
+  const query = supabase.from("revenue_entries")
     .update({ status: "voided", voided_at: new Date().toISOString(), voided_by: profile.id, void_reason: voidReason.trim(), updated_at: new Date().toISOString() })
-    .eq("id", revenueId).eq("shop_id", profile.shop_id).eq("status", "recorded")
-    .select().single();
+    .eq("id", revenueId).eq("shop_id", profile.shop_id).eq("status", "recorded");
+  const scoped = profile.role === "admin" ? query : query.eq("employee_id", profile.id);
+
+  const { data, error } = await scoped.select().single();
   if (error) throw new Error(error.message);
   return data;
 }
@@ -300,11 +359,11 @@ export async function updateRevenueEntryAction(formData: {
   note?: string;
 }) {
   const { profile, supabase } = await requireActiveProfile();
-  if (!Number.isInteger(formData.amount) || formData.amount <= 0) throw new Error("Invalid amount");
+  if (!Number.isInteger(formData.amount) || formData.amount <= 0) throw new Error("Số tiền không hợp lệ");
   const { data: existing, error: existingError } = await supabase.from("revenue_entries").select("business_date").eq("id", formData.id).eq("shop_id", profile.shop_id).single();
   if (existingError) throw new Error(existingError.message);
   const { data: closing } = await supabase.from("daily_closings").select("id").eq("shop_id", profile.shop_id).eq("business_date", existing.business_date).eq("is_closed", true).maybeSingle();
-  if (closing) throw new Error("Business day is closed");
+  if (closing) throw new Error(`Admin đã chốt doanh thu ngày ${existing.business_date}. Bạn không thể sửa đơn vào ngày này.`);
   const query = supabase
     .from("revenue_entries")
     .update({ amount: formData.amount, payment_method: formData.payment_method, service_name: formData.service_name || "Dịch vụ tóc", note: formData.note, updated_at: new Date().toISOString() })

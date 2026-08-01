@@ -12,6 +12,7 @@ import { DayClosingCard } from "@/components/ui/DayClosingCard";
 import { getAdminDashboardDataAction } from "@/server/actions/revenue";
 import { formatBusinessDateDisplay } from "@/lib/dates";
 import { subscribeRealtime } from "@/lib/realtime";
+import { withClientCache, invalidateClientCache } from "@/lib/cache";
 
 export default function AdminDashboardPage() {
   const [totalRevenue, setTotalRevenue] = useState<bigint>(0n);
@@ -26,7 +27,7 @@ export default function AdminDashboardPage() {
 
   const loadDashboardData = async () => {
     try {
-      const data = await getAdminDashboardDataAction();
+      const data = await withClientCache("admin-dashboard", () => getAdminDashboardDataAction(), 60000);
       setBusinessDate(data.businessDate);
       setTotalRevenue(BigInt(data.totalRevenue || "0"));
       setCashTotal(BigInt(data.cashTotal || "0"));
@@ -57,9 +58,10 @@ export default function AdminDashboardPage() {
     loadDashboardData();
 
     const unsubscribe = subscribeRealtime(() => {
-      loadDashboardData();
+      invalidateClientCache("admin-dashboard");
+      void loadDashboardData();
     });
-    const interval = window.setInterval(() => loadDashboardData(), 30000);
+    const interval = window.setInterval(() => { void loadDashboardData(); }, 30000);
 
     return () => {
       unsubscribe();

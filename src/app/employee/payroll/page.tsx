@@ -11,6 +11,7 @@ import { loadAuthSession, type UserSession } from "@/lib/auth";
 import { subscribeRealtime } from "@/lib/realtime";
 import { Lock, ShieldAlert, Loader2 } from "lucide-react";
 import { fetchMyPayrollSlipAction } from "@/server/actions/payroll";
+import { withClientCache, invalidateClientCache } from "@/lib/cache";
 
 export default function EmployeePayrollPage() {
   const [selectedMonth, setSelectedMonth] = useState<string>(() => getCurrentVietnamMonthStr());
@@ -24,7 +25,7 @@ export default function EmployeePayrollPage() {
     setIsLoading(true);
     try {
       // Try Database server action first
-      const dbSlip = await fetchMyPayrollSlipAction(monthStr);
+      const dbSlip = await withClientCache(`emp-payroll-${monthStr}`, () => fetchMyPayrollSlipAction(monthStr), 60000);
       if (dbSlip) {
         setIsPublished(dbSlip.status === "published" || dbSlip.status === "paid");
         setMySlip(dbSlip as any);
@@ -47,7 +48,10 @@ export default function EmployeePayrollPage() {
       setSession(current);
       void loadPayrollForMonth(selectedMonth);
     });
-    const unsubscribe = subscribeRealtime(() => { void loadPayrollForMonth(selectedMonth); });
+    const unsubscribe = subscribeRealtime(() => {
+      invalidateClientCache(`emp-payroll-${selectedMonth}`);
+      void loadPayrollForMonth(selectedMonth);
+    });
     return () => { cancelled = true; unsubscribe(); };
   }, [selectedMonth]);
 

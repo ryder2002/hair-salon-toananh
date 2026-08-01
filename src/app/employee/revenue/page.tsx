@@ -8,6 +8,7 @@ import { RecentTransactionsList, TransactionItem } from "@/components/ui/RecentT
 import { formatVND, parseVNDInput } from "@/lib/money";
 import { loadAuthSession, type UserSession } from "@/lib/auth";
 import { subscribeRealtime } from "@/lib/realtime";
+import { withClientCache, invalidateClientCache } from "@/lib/cache";
 import { fetchRevenuesAction, voidRevenueEntryAction, updateRevenueEntryAction } from "@/server/actions/revenue";
 import { logAuditAction } from "@/server/actions/audit";
 
@@ -30,7 +31,7 @@ export default function EmployeeRevenueHistoryPage() {
     const empName = activeSession?.fullName || "";
 
     try {
-      const dbList = await fetchRevenuesAction();
+      const dbList = await withClientCache("emp-revenue-history", () => fetchRevenuesAction(), 60000);
       if (dbList) {
         let sum = 0n;
         const formattedList: TransactionItem[] = [];
@@ -63,7 +64,10 @@ export default function EmployeeRevenueHistoryPage() {
 
   useEffect(() => {
     loadHistory();
-    const unsubscribe = subscribeRealtime(() => { void loadHistory(); });
+    const unsubscribe = subscribeRealtime(() => {
+      invalidateClientCache("emp-revenue-history");
+      void loadHistory();
+    });
     const interval = window.setInterval(() => { void loadHistory(); }, 30000);
     return () => { unsubscribe(); window.clearInterval(interval); };
   }, []);
