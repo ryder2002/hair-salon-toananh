@@ -140,6 +140,9 @@ export default function AdminDashboardPage() {
             initialBusinessDate={businessDate}
             initialClosed={isClosed}
             onCloseDay={loadDashboardData}
+            totalRevenue={totalRevenue}
+            cashTotal={cashTotal}
+            bankTotal={bankTotal}
           />
         </section>
       </main>

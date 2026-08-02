@@ -142,6 +142,23 @@ export async function updatePayrollStatusAction(payrollMonthStr: string, status:
   return data;
 }
 
+export async function unlockPayrollAction(payrollMonthStr: string) {
+  const { supabase, profile } = await requireAdmin();
+  const month = parseMonthToDbDate(payrollMonthStr);
+  const { data, error } = await supabase.rpc("unlock_payroll", { p_payroll_month: month });
+  if (error) throw new Error(error.message);
+  
+  await supabase.from("audit_logs").insert({
+    shop_id: profile.shop_id,
+    actor_id: profile.id,
+    action: "PAYROLL_UNLOCKED",
+    entity_type: "payrolls",
+    new_data: { payroll_month: month }
+  });
+
+  return { success: true, count: data };
+}
+
 export async function updateSinglePayrollPaidAction(payrollMonthStr: string, employeeId: string, isPaid: boolean) {
   if (!isPaid) throw new Error("Paid payroll cannot be reverted");
   const { profile, supabase } = await requireAdmin();

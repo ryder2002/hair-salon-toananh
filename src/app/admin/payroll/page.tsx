@@ -33,6 +33,7 @@ import {
   updateSinglePayrollPaidAction,
   updateSalarySettingsAction,
   fetchPayrollHistoryAction,
+  unlockPayrollAction,
   PayrollMonthSummary,
 } from "@/server/actions/payroll";
 
@@ -192,6 +193,27 @@ export default function PayrollPage() {
       triggerToast(`Đã ${statusText} thành công trong Database!`);
     } catch (err: any) {
       triggerToast(`Lỗi cập nhật trạng thái: ${err.message}`);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUnlockPayroll = async () => {
+    setIsLoading(true);
+    try {
+      await unlockPayrollAction(selectedMonth);
+      await loadPayrollFromDatabase(selectedMonth);
+      await loadHistoryFromDatabase();
+      
+      await logAuditAction({
+        action: "PAYROLL_UNLOCKED",
+        actorName: "Admin Manager",
+        actorRole: "admin",
+        details: `Đã mở lại bảng lương ${selectedMonth} về trạng thái Nháp (Draft)`,
+      });
+      triggerToast(`Đã mở khóa thành công bảng lương ${selectedMonth}!`);
+    } catch (err: any) {
+      triggerToast(`Lỗi mở khóa bảng lương: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -363,13 +385,33 @@ export default function PayrollPage() {
             <div className="flex flex-wrap gap-2 justify-between items-center bg-white p-2.5 rounded-[12px] border border-[rgba(23,23,23,0.12)]">
               <div className="flex items-center space-x-1">
                 {globalStatus === "draft" && (
+                  <>
+                    <button
+                      onClick={() => handleStatusChange("locked")}
+                      disabled={isLoading}
+                      className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-amber-600 text-amber-700 disabled:opacity-50"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Khóa bảng lương</span>
+                    </button>
+                    <button
+                      onClick={handleGeneratePayroll}
+                      disabled={isLoading}
+                      className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-emerald-600 text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                    >
+                      <Calculator className="w-3.5 h-3.5" />
+                      <span>Tính toán lại</span>
+                    </button>
+                  </>
+                )}
+                {(globalStatus === "locked" || globalStatus === "published") && (
                   <button
-                    onClick={() => handleStatusChange("locked")}
+                    onClick={handleUnlockPayroll}
                     disabled={isLoading}
-                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-amber-600 text-amber-700 disabled:opacity-50"
+                    className="btn-outline text-[11px] px-2.5 py-1.5 h-8 font-semibold rounded-[8px] flex items-center space-x-1 border-gray-500 text-gray-700 hover:bg-gray-100 disabled:opacity-50"
                   >
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Khóa bảng lương</span>
+                    <span>Mở lại bảng lương</span>
                   </button>
                 )}
                 {globalStatus === "locked" && (

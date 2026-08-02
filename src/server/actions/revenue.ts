@@ -15,44 +15,21 @@ export async function getAdminDashboardDataAction() {
   const dateStr = getVietnamBusinessDate();
 
   const tRevenueStart = performance.now();
-  const [revRes, empRes, closingRes, notifRes] = await Promise.all([
-    supabase
-      .from("revenue_entries")
-      .select("id, amount, payment_method, service_name, note, business_date, performed_at, status, employee_id, created_by, profiles:employee_id(full_name, avatar_url)")
-      .eq("shop_id", profile.shop_id)
-      .eq("business_date", dateStr)
-      .order("performed_at", { ascending: false })
-      .limit(500),
-    supabase
-      .from("profiles")
-      .select("id, full_name")
-      .eq("role", "employee")
-      .eq("status", "active"),
-    supabase
-      .from("daily_closings")
-      .select("id, business_date, cash_total, bank_transfer_total, revenue_total, transaction_count, is_closed, closed_at, reopened_at, reopen_reason")
-      .eq("shop_id", profile.shop_id)
-      .eq("business_date", dateStr)
-      .maybeSingle(),
-    supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", profile.id)
-      .is("read_at", null),
-  ]);
+  
+  const { data: rpcData, error } = await supabase.rpc("get_admin_dashboard", {
+    p_business_date: dateStr
+  });
+
+  if (error) throw new Error(error.message);
 
   const tRevenueEnd = performance.now();
-  console.log(`[PERF] revenue: ${(tRevenueEnd - tRevenueStart).toFixed(2)} ms`);
-  console.log(`[PERF] employees: ${(tRevenueEnd - tRevenueStart).toFixed(2)} ms`);
-  console.log(`[PERF] transactions: ${(tRevenueEnd - tRevenueStart).toFixed(2)} ms`);
+  console.log(`[PERF] admin-rpc: ${(tRevenueEnd - tRevenueStart).toFixed(2)} ms`);
 
-  if (revRes.error) throw new Error(revRes.error.message);
-  if (empRes.error) throw new Error(empRes.error.message);
-
-  const rawRevenues = revRes.data || [];
-  const dbEmployees = empRes.data || [];
-  const closingData = closingRes.data;
-  const unreadCount = notifRes.count || 0;
+  const dashboardData = rpcData as any;
+  const rawRevenues = dashboardData.today_entries || [];
+  const dbEmployees = dashboardData.employees || [];
+  const closingData = dashboardData.closing || null;
+  const unreadCount = dashboardData.unread_count || 0;
 
   const recorded = rawRevenues.filter((t: any) => t.status === "recorded");
 
@@ -127,34 +104,17 @@ export async function getEmployeeDashboardDataAction() {
   const dateStr = getVietnamBusinessDate();
   const monthStartStr = `${dateStr.substring(0, 7)}-01`;
 
-  const [todayRes, monthRes, notifRes] = await Promise.all([
-    supabase
-      .from("revenue_entries")
-      .select("id, amount, payment_method, service_name, note, business_date, performed_at, status")
-      .eq("shop_id", profile.shop_id)
-      .eq("employee_id", profile.id)
-      .eq("business_date", dateStr)
-      .order("performed_at", { ascending: false }),
-    supabase
-      .from("revenue_entries")
-      .select("amount")
-      .eq("shop_id", profile.shop_id)
-      .eq("employee_id", profile.id)
-      .eq("status", "recorded")
-      .gte("business_date", monthStartStr)
-      .lte("business_date", dateStr),
-    supabase
-      .from("notifications")
-      .select("id", { count: "exact", head: true })
-      .eq("recipient_id", profile.id)
-      .is("read_at", null),
-  ]);
+  const { data: rpcData, error } = await supabase.rpc("get_employee_dashboard", {
+    p_business_date: dateStr,
+    p_month_start: monthStartStr
+  });
 
-  if (todayRes.error) throw new Error(todayRes.error.message);
-  if (monthRes.error) throw new Error(monthRes.error.message);
+  if (error) throw new Error(error.message);
 
-  const todayEntries = todayRes.data || [];
-  const monthEntries = monthRes.data || [];
+  const dashboardData = rpcData as any;
+  const todayEntries = dashboardData.today_entries || [];
+  const cMonth = BigInt(dashboardData.month_total || 0);
+  const unreadCount = dashboardData.unread_count || 0;
 
   let cCash = 0n;
   let cTransfer = 0n;
@@ -180,10 +140,6 @@ export async function getEmployeeDashboardDataAction() {
     });
   });
 
-  let cMonth = 0n;
-  monthEntries.forEach((e: any) => {
-    cMonth += BigInt(e.amount || 0);
-  });
 
   return {
     businessDate: dateStr,
@@ -193,7 +149,7 @@ export async function getEmployeeDashboardDataAction() {
     monthTotal: cMonth.toString(),
     cutCount,
     transactions: formattedTxs,
-    unreadNotificationCount: notifRes.count || 0,
+    unreadNotificationCount: unreadCount,
     employeeName: profile.full_name,
   };
 }

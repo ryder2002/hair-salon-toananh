@@ -8,9 +8,12 @@ interface DayClosingCardProps {
   onCloseDay?: () => void;
   initialBusinessDate?: string;
   initialClosed?: boolean;
+  totalRevenue?: bigint;
+  cashTotal?: bigint;
+  bankTotal?: bigint;
 }
 
-export function DayClosingCard({ onCloseDay, initialBusinessDate, initialClosed }: DayClosingCardProps) {
+export function DayClosingCard({ onCloseDay, initialBusinessDate, initialClosed, totalRevenue, cashTotal, bankTotal }: DayClosingCardProps) {
   const [businessDate, setBusinessDate] = useState(initialBusinessDate || "");
   const [closed, setClosed] = useState(initialClosed ?? false);
   const [showModal, setShowModal] = useState(false);
@@ -88,6 +91,28 @@ export function DayClosingCard({ onCloseDay, initialBusinessDate, initialClosed 
             <button onClick={() => setShowModal(false)} className="absolute right-4 top-4 text-gray-400"><X className="w-5 h-5" /></button>
             <div className="flex items-center space-x-2 text-[#741F2C]"><CalendarCheck className="w-6 h-6" /><h3 className="font-bold text-base text-[#171717]">{closed ? "Mở lại ngày làm việc" : "Xác nhận chốt ngày"}</h3></div>
             <p className="text-xs text-gray-600">Ngày nghiệp vụ: <strong>{businessDate}</strong>. {closed ? "Mở lại sẽ cho phép chỉnh sửa doanh thu." : "Sau khi chốt, nhân viên không thể ghi hoặc sửa doanh thu ngày này."}</p>
+            
+            {!closed && totalRevenue !== undefined && (
+              <div className="bg-[#F7F3EC] p-3 rounded-[10px] text-xs space-y-1 font-medium">
+                <div className="flex justify-between">
+                  <span>Tổng doanh thu:</span>
+                  <strong className="text-[#741F2C]">{new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(totalRevenue))}</strong>
+                </div>
+                {cashTotal !== undefined && (
+                  <div className="flex justify-between">
+                    <span>Tiền mặt:</span>
+                    <span>{new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(cashTotal))}</span>
+                  </div>
+                )}
+                {bankTotal !== undefined && (
+                  <div className="flex justify-between">
+                    <span>Chuyển khoản:</span>
+                    <span>{new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(Number(bankTotal))}</span>
+                  </div>
+                )}
+              </div>
+            )}
+
             {closed && <textarea value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do mở lại ngày (bắt buộc)" rows={3} className="w-full border rounded-lg p-2 text-sm" />}
             <div className="flex space-x-2"><button onClick={() => setShowModal(false)} className="flex-1 border py-2.5 rounded-lg text-xs font-bold">Hủy</button><button onClick={confirm} disabled={loading || (closed && reason.trim().length < 3)} className="flex-1 bg-[#741F2C] text-white py-2.5 rounded-lg text-xs font-bold disabled:opacity-50">{loading ? "Đang xử lý..." : closed ? "Xác nhận mở lại" : "Xác nhận chốt ngày"}</button></div>
             {!closed && <div className="flex items-center gap-1 text-[10px] text-amber-700"><AlertTriangle className="w-3 h-3" />Tổng tiền sẽ được tính lại từ Database.</div>}
