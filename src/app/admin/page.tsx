@@ -37,14 +37,14 @@ export default function AdminDashboardPage() {
       setUnreadCount(data.unreadNotificationCount);
 
       setStaffRevenues(
-        data.staffRevenues.map((s) => ({
+        data.staffRevenues.map((s: any) => ({
           ...s,
           revenue: BigInt(s.revenue || "0"),
         }))
       );
 
       setRecentTransactions(
-        data.recentTransactions.map((t) => ({
+        data.recentTransactions.map((t: any) => ({
           ...t,
           amount: BigInt(t.amount || "0"),
         }))
